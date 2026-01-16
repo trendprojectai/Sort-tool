@@ -1,0 +1,7 @@
+{
+  "name": "Restaurant Matcher Pro",
+  "description": "A professional data matching tool that merges restaurant data from OSM and Google Maps with manual review and map visualization.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
