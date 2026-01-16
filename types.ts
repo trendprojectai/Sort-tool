@@ -8,6 +8,7 @@ export interface OSMRestaurant {
   '@id'?: string;
   amenity?: string;
   cuisine?: string;
+  google_place_id?: string;
 }
 
 export interface GoogleRestaurant {
@@ -20,6 +21,22 @@ export interface GoogleRestaurant {
   categoryName?: string;
   url?: string;
   imageUrl?: string;
+  latitude?: number;
+  longitude?: number;
+  google_place_id?: string;
+}
+
+export interface UnmatchedCacheEntry {
+  normalized_name: string;
+  original_name: string;
+  latitude: number;
+  longitude: number;
+  normalized_address?: string;
+  google_place_id?: string;
+  source: 'overpass' | 'apify';
+  first_seen_at: string;
+  last_seen_at: string;
+  seen_count: number;
 }
 
 export type Confidence = 'High' | 'Medium' | 'Low' | 'Unmatched';

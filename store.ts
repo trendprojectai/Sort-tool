@@ -1,11 +1,14 @@
 
 import { create } from 'zustand';
-import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem } from './types';
-import { calculateMatchScore, getConfidence } from './lib/utils';
+import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem, UnmatchedCacheEntry } from './types';
+import { calculateMatchScore, getConfidence, normalizeName } from './lib/utils';
 
 interface AppState {
   jobs: Job[];
+  unmatchedCache: UnmatchedCacheEntry[];
   currentJobId: string | null;
+  pushedToSecondaryId: string | null;
+  secondaryProcessingStatus: 'idle' | 'processing' | 'completed';
   settings: AppSettings;
   supabaseConfig: SupabaseConfig;
   
@@ -29,7 +32,18 @@ interface AppState {
   linkItems: (osm: OSMRestaurant, google: GoogleRestaurant) => void;
   
   resetApp: () => void;
-  saveToPersistence: () => void;
+  saveToPersistence: () => Promise<void>;
+  
+  // Cache Actions
+  addToUnmatchedCache: (item: OSMRestaurant | GoogleRestaurant, source: 'overpass' | 'apify') => void;
+  cacheAllUnmatched: () => Promise<void>;
+
+  // Config Actions
+  setSupabaseConfig: (config: SupabaseConfig) => void;
+
+  // Secondary Scrape Actions
+  pushToSecondary: (id: string) => void;
+  setSecondaryStatus: (status: 'idle' | 'processing' | 'completed') => void;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -38,11 +52,23 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light'
 };
 
+const persist = (jobs: Job[], currentJobId: string | null, unmatchedCache: UnmatchedCacheEntry[], supabaseConfig: SupabaseConfig) => {
+  localStorage.setItem('rmPro_jobs', JSON.stringify(jobs));
+  localStorage.setItem('rmPro_unmatchedCache', JSON.stringify(unmatchedCache));
+  localStorage.setItem('rmPro_supabaseConfig', JSON.stringify(supabaseConfig));
+  if (currentJobId) {
+    localStorage.setItem('rmPro_currentJobId', currentJobId);
+  }
+};
+
 export const useStore = create<AppState>((set, get) => ({
   jobs: JSON.parse(localStorage.getItem('rmPro_jobs') || '[]'),
+  unmatchedCache: JSON.parse(localStorage.getItem('rmPro_unmatchedCache') || '[]'),
   currentJobId: localStorage.getItem('rmPro_currentJobId') || null,
+  pushedToSecondaryId: localStorage.getItem('rmPro_pushedToSecondaryId') || null,
+  secondaryProcessingStatus: 'idle',
   settings: DEFAULT_SETTINGS,
-  supabaseConfig: { url: '', key: '', tableName: 'restaurants' },
+  supabaseConfig: JSON.parse(localStorage.getItem('rmPro_supabaseConfig') || '{"url": "", "key": "", "tableName": "restaurants"}'),
 
   currentJob: () => {
     const { jobs, currentJobId } = get();
@@ -66,16 +92,18 @@ export const useStore = create<AppState>((set, get) => ({
       flaggedItems: [],
       currentReviewIndex: 0
     };
-    const newState = {
-      jobs: [newJob, ...state.jobs],
+    const nextJobs = [newJob, ...state.jobs];
+    persist(nextJobs, newJob.id, state.unmatchedCache, state.supabaseConfig);
+    return {
+      jobs: nextJobs,
       currentJobId: newJob.id
     };
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newState.jobs));
-    localStorage.setItem('rmPro_currentJobId', newJob.id);
-    return newState;
   }),
 
-  setCurrentJobId: (id) => set({ currentJobId: id }),
+  setCurrentJobId: (id) => {
+    localStorage.setItem('rmPro_currentJobId', id);
+    set({ currentJobId: id });
+  },
 
   updateCurrentJob: (updates) => set((state) => {
     const newJobs = state.jobs.map(j => 
@@ -83,7 +111,7 @@ export const useStore = create<AppState>((set, get) => ({
         ? { ...j, ...updates, updated_at: new Date().toISOString() } 
         : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
@@ -109,7 +137,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, matches: newMatches, updated_at: new Date().toISOString() } : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
@@ -117,7 +145,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, currentReviewIndex: index, updated_at: new Date().toISOString() } : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
@@ -134,7 +162,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, mapSpots: [...j.mapSpots, newSpot], updated_at: new Date().toISOString() } : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
@@ -148,10 +176,13 @@ export const useStore = create<AppState>((set, get) => ({
       created_at: new Date().toISOString()
     };
     
+    // Auto-record to unmatched memory cache when item is manually flagged
+    get().addToUnmatchedCache(item.restaurant, item.source === 'osm' ? 'overpass' : 'apify');
+
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, flaggedItems: [...j.flaggedItems, newItem], updated_at: new Date().toISOString() } : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
@@ -183,17 +214,88 @@ export const useStore = create<AppState>((set, get) => ({
         updated_at: new Date().toISOString() 
       } : j
     );
-    localStorage.setItem('rmPro_jobs', JSON.stringify(newJobs));
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
     return { jobs: newJobs };
   }),
 
   resetApp: () => {
     localStorage.clear();
-    set({ jobs: [], currentJobId: null });
+    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, unmatchedCache: [], supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
   },
 
-  saveToPersistence: () => {
-    const { jobs } = get();
-    localStorage.setItem('rmPro_jobs', JSON.stringify(jobs));
-  }
+  saveToPersistence: async () => {
+    const { jobs, currentJobId, unmatchedCache, supabaseConfig } = get();
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        persist(jobs, currentJobId, unmatchedCache, supabaseConfig);
+        resolve();
+      }, 600);
+    });
+  },
+
+  addToUnmatchedCache: (item, source) => set((state) => {
+    const name = 'name' in item ? item.name : item.title;
+    const normalized_name = normalizeName(name);
+    const lat = item.latitude || 0;
+    const lng = item.longitude || 0;
+    const address = 'street' in item ? item.street : item['addr:street'];
+    const placeId = item.google_place_id;
+
+    const existingIndex = state.unmatchedCache.findIndex(e => 
+      (placeId && e.google_place_id === placeId) || 
+      (e.normalized_name === normalized_name && Math.abs(e.latitude - lat) < 0.001 && Math.abs(e.longitude - lng) < 0.001)
+    );
+
+    let newCache = [...state.unmatchedCache];
+    const now = new Date().toISOString();
+
+    if (existingIndex > -1) {
+      const entry = newCache[existingIndex];
+      newCache[existingIndex] = {
+        ...entry,
+        last_seen_at: now,
+        seen_count: entry.seen_count + 1
+      };
+    } else {
+      newCache.push({
+        normalized_name,
+        original_name: name,
+        latitude: lat,
+        longitude: lng,
+        normalized_address: address ? normalizeName(address) : undefined,
+        google_place_id: placeId,
+        source,
+        first_seen_at: now,
+        last_seen_at: now,
+        seen_count: 1
+      });
+    }
+
+    localStorage.setItem('rmPro_unmatchedCache', JSON.stringify(newCache));
+    return { unmatchedCache: newCache };
+  }),
+
+  cacheAllUnmatched: async () => {
+    const job = get().currentJob();
+    if (!job) return;
+
+    // Process OSM
+    job.unmatchedOSM.forEach(item => get().addToUnmatchedCache(item, 'overpass'));
+    // Process Google
+    job.unmatchedGoogle.forEach(item => get().addToUnmatchedCache(item, 'apify'));
+
+    return Promise.resolve();
+  },
+
+  setSupabaseConfig: (config) => set((state) => {
+    localStorage.setItem('rmPro_supabaseConfig', JSON.stringify(config));
+    return { supabaseConfig: config };
+  }),
+
+  pushToSecondary: (id) => {
+    localStorage.setItem('rmPro_pushedToSecondaryId', id);
+    set({ pushedToSecondaryId: id, secondaryProcessingStatus: 'idle' });
+  },
+
+  setSecondaryStatus: (status) => set({ secondaryProcessingStatus: status })
 }));

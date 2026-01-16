@@ -13,7 +13,10 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
-  Info
+  Info,
+  Clock,
+  Layers,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Match } from '../types';
@@ -61,194 +64,241 @@ const ReviewPage: React.FC = () => {
 
   if (!currentMatch) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
-          <CheckCircle2 size={32} />
+      <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in-95 duration-700">
+        <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-inner shadow-indigo-100/50">
+          <CheckCircle2 size={48} />
         </div>
-        <h3 className="text-xl font-bold text-gray-900">No matches to review</h3>
-        <p className="text-gray-500 max-w-xs mx-auto mt-2">All matches have been processed or none were found in this dataset.</p>
+        <h3 className="text-3xl font-black text-slate-800 tracking-tight">Review Queue Clear</h3>
+        <p className="text-slate-400 font-medium max-w-sm mx-auto mt-4 leading-relaxed">All pending matches have been processed. Switch to Export to finalize your data.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-6">
-      {/* Top Bar Stats */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex items-center justify-between sticky top-[72px] z-40 backdrop-blur-md bg-white/90">
-        <div className="flex items-center gap-6">
-          <div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reviewed</div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg">{confirmedCount + rejectedCount}</span>
-              <span className="text-gray-300">/</span>
-              <span className="text-gray-500 text-sm">{totalCount}</span>
+    <div className="max-w-6xl mx-auto flex flex-col gap-10">
+      {/* Immersive Top Stats */}
+      <div className="glass border border-white/60 rounded-2xl p-4 shadow-sm flex items-center justify-between sticky top-[92px] z-40">
+        <div className="flex items-center gap-8 pl-4">
+          <div className="flex items-center gap-4">
+            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+            <div>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">Queue Status</div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-slate-800 text-lg">{(confirmedCount + rejectedCount).toLocaleString()}</span>
+                <span className="text-slate-300 font-bold">/</span>
+                <span className="text-slate-400 font-bold text-sm">{totalCount.toLocaleString()}</span>
+              </div>
             </div>
           </div>
-          <div className="h-10 w-px bg-gray-100" />
-          <div className="hidden sm:block">
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</div>
-            <div className="flex gap-2">
-              <button onClick={() => setFilter('All')} className={`px-2 py-1 rounded text-xs font-semibold ${filter === 'All' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>All</button>
-              <button onClick={() => setFilter('High')} className={`px-2 py-1 rounded text-xs font-semibold ${filter === 'High' ? 'bg-green-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>High</button>
-              <button onClick={() => setFilter('Medium')} className={`px-2 py-1 rounded text-xs font-semibold ${filter === 'Medium' ? 'bg-amber-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>Medium</button>
-            </div>
+          <div className="h-8 w-px bg-slate-100" />
+          <div className="hidden md:flex gap-1.5 p-1 bg-slate-50 rounded-xl">
+            {['All', 'High', 'Medium'].map(f => (
+                <button 
+                  key={f}
+                  onClick={() => setFilter(f as any)} 
+                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filter === f ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  {f}
+                </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button 
             onClick={() => setReviewIndex(Math.max(0, currentReviewIndex - 1))}
-            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+            className="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-800 transition-all border border-transparent hover:border-slate-100 active:scale-90"
           >
             <ChevronLeft size={24} />
           </button>
-          <span className="font-mono text-sm font-bold text-gray-400 px-3">
-            {currentReviewIndex + 1} of {totalCount}
-          </span>
+          <div className="glass px-4 py-2 rounded-xl text-[11px] font-black text-slate-600 mono tracking-tighter shadow-inner">
+            {currentReviewIndex + 1} OF {totalCount}
+          </div>
           <button 
             onClick={() => setReviewIndex(Math.min(totalCount - 1, currentReviewIndex + 1))}
-            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+            className="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-800 transition-all border border-transparent hover:border-slate-100 active:scale-90"
           >
             <ChevronRight size={24} />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6 mt-8">
-        {/* OSM Card */}
-        <div className="lg:col-span-3 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl overflow-hidden relative">
-          <div className="absolute top-0 right-0 px-4 py-2 bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl">
-            OSM Source
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-10">
+        {/* Source A (OSM) */}
+        <div className="lg:col-span-3 bg-white/40 border border-slate-100 rounded-[2.5rem] p-10 shadow-sm relative group hover:bg-white hover:shadow-2xl hover:translate-y-[-4px] transition-all duration-500">
+          <div className="absolute top-8 left-8 flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+                <Layers size={16} />
+            </div>
+            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Source A (OSM)</span>
           </div>
-          <h3 className="text-2xl font-black text-gray-900 mb-6 mt-8">{currentMatch.osmData.name}</h3>
           
-          <div className="space-y-5">
-            <div className="flex items-start gap-3">
-              <MapPin className="text-gray-400 mt-1" size={18} />
-              <div>
-                <p className="text-sm font-semibold text-gray-700">{currentMatch.osmData['addr:street'] || 'Street not provided'}</p>
-                <p className="text-xs text-gray-500">{currentMatch.osmData['addr:postcode'] || 'No Postcode'}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Star className="text-gray-400" size={18} />
-              <p className="text-sm text-gray-600">{currentMatch.osmData.cuisine || 'Cuisine unspecified'}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Info className="text-gray-400" size={18} />
-              <code className="text-xs bg-gray-50 px-2 py-1 rounded text-gray-500">{currentMatch.osmData['@id']}</code>
+          <div className="mt-16">
+            <h3 className="text-3xl font-black text-slate-800 mb-8 leading-tight">{currentMatch.osmData.name}</h3>
+            
+            <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <MapPin size={18} />
+                    </div>
+                    <div>
+                        <p className="text-base font-bold text-slate-700 leading-tight">{currentMatch.osmData['addr:street'] || 'Unknown Street'}</p>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{currentMatch.osmData['addr:postcode'] || 'No Postcode'}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <Star size={18} />
+                    </div>
+                    <p className="text-sm font-bold text-slate-600">{currentMatch.osmData.cuisine || 'Cuisine unspecified'}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <Info size={18} />
+                    </div>
+                    <code className="text-[10px] font-black mono text-slate-400 px-2 py-1 bg-slate-50 rounded-md border border-slate-100">{currentMatch.osmData['@id']}</code>
+                </div>
             </div>
           </div>
 
-          <div className="mt-10 pt-6 border-t border-gray-50 flex justify-between items-center">
-            <a href={`https://www.openstreetmap.org/${currentMatch.osmData['@id']}`} target="_blank" className="text-blue-600 hover:underline text-xs flex items-center gap-1">
-              View on OSM <ExternalLink size={12} />
+          <div className="mt-12 pt-8 border-t border-slate-50">
+            <a href={`https://www.openstreetmap.org/${currentMatch.osmData['@id']}`} target="_blank" className="text-indigo-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-1.5 hover:translate-x-1 transition-all">
+              Inspect on OSM <ExternalLink size={12} />
             </a>
           </div>
         </div>
 
-        {/* Center Analysis */}
-        <div className="lg:col-span-1 flex flex-col items-center justify-center gap-4 py-4">
-           <div className={`w-16 h-16 rounded-full flex items-center justify-center border-4 ${
-             currentMatch.confidence === 'High' ? 'border-green-100 text-green-600 bg-green-50' : 
-             currentMatch.confidence === 'Medium' ? 'border-amber-100 text-amber-600 bg-amber-50' : 'border-red-100 text-red-600 bg-red-50'
-           }`}>
-             <span className="text-xl font-black">{Math.round(currentMatch.score)}%</span>
-           </div>
-           <div className="text-center">
-             <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Match Confidence</p>
-             <p className={`text-xs font-bold ${
-               currentMatch.confidence === 'High' ? 'text-green-600' : 
-               currentMatch.confidence === 'Medium' ? 'text-amber-600' : 'text-red-600'
-             }`}>{currentMatch.confidence}</p>
-           </div>
-           {currentMatch.method === 'manual_verified' && (
-             <div className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-bold animate-pulse">
-               MANUAL VERIFIED
-             </div>
-           )}
-           <div className="h-20 w-px bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+        {/* Center Scoring Analysis */}
+        <div className="lg:col-span-1 flex flex-col items-center justify-center gap-6 py-6 lg:border-x border-slate-100">
+            <div className="relative group">
+                <div className={`absolute inset-0 blur-2xl rounded-full opacity-20 group-hover:opacity-40 transition-all ${
+                    currentMatch.confidence === 'High' ? 'bg-emerald-500' : 
+                    currentMatch.confidence === 'Medium' ? 'bg-amber-500' : 'bg-red-500'
+                }`} />
+                <div className={`relative w-24 h-24 rounded-[2rem] glass flex items-center justify-center border-4 neo-shadow transition-transform duration-500 group-hover:scale-110 ${
+                    currentMatch.confidence === 'High' ? 'border-emerald-100 text-emerald-600' : 
+                    currentMatch.confidence === 'Medium' ? 'border-amber-100 text-amber-600' : 'border-red-100 text-red-600'
+                }`}>
+                    <span className="text-3xl font-black">{Math.round(currentMatch.score)}%</span>
+                </div>
+            </div>
+            
+            <div className="text-center space-y-1">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Similarity Score</p>
+                <p className={`text-xs font-black uppercase tracking-widest ${
+                    currentMatch.confidence === 'High' ? 'text-emerald-500' : 
+                    currentMatch.confidence === 'Medium' ? 'text-amber-500' : 'text-red-500'
+                }`}>{currentMatch.confidence} Confidence</p>
+            </div>
+
+            {currentMatch.method === 'manual_verified' && (
+                <div className="bg-indigo-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-100">
+                    Neural Overlay
+                </div>
+            )}
+
+            <div className="p-4 bg-slate-50 rounded-full text-slate-300">
+                <ArrowRightLeft size={24} />
+            </div>
         </div>
 
-        {/* Google Card */}
-        <div className="lg:col-span-3 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl overflow-hidden relative">
-          <div className="absolute top-0 right-0 px-4 py-2 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl">
-            Google Maps
-          </div>
-          <h3 className="text-2xl font-black text-gray-900 mb-6 mt-8">{currentMatch.googleData.title}</h3>
-
-          <div className="space-y-5">
-            <div className="flex items-start gap-3">
-              <MapPin className="text-gray-400 mt-1" size={18} />
-              <div>
-                <p className="text-sm font-semibold text-gray-700">{currentMatch.googleData.street}</p>
-              </div>
+        {/* Source B (Google) */}
+        <div className="lg:col-span-3 bg-white/40 border border-slate-100 rounded-[2.5rem] p-10 shadow-sm relative group hover:bg-white hover:shadow-2xl hover:translate-y-[-4px] transition-all duration-500">
+          <div className="absolute top-8 left-8 flex items-center gap-2">
+            <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm">
+                <Globe size={16} />
             </div>
-            <div className="flex items-center gap-3">
-              <Star className="text-amber-400 fill-amber-400" size={18} />
-              <p className="text-sm text-gray-700 font-bold">{currentMatch.googleData.totalScore} <span className="text-gray-400 font-medium">({currentMatch.googleData.reviewsCount} reviews)</span></p>
-            </div>
-            {currentMatch.googleData.phone && (
-              <div className="flex items-center gap-3">
-                <Phone className="text-gray-400" size={18} />
-                <p className="text-sm text-gray-600">{currentMatch.googleData.phone}</p>
-              </div>
-            )}
-            {currentMatch.googleData.website && (
-              <div className="flex items-center gap-3">
-                <Globe className="text-gray-400" size={18} />
-                <p className="text-sm text-blue-600 truncate">{currentMatch.googleData.website.replace('https://', '')}</p>
-              </div>
-            )}
+            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Source B (Google)</span>
           </div>
 
-          <div className="mt-10 pt-6 border-t border-gray-50">
-            <a href={currentMatch.googleData.url} target="_blank" className="text-emerald-600 hover:underline text-xs flex items-center gap-1">
-              View on Google Maps <ExternalLink size={12} />
+          <div className="mt-16">
+            <h3 className="text-3xl font-black text-slate-800 mb-8 leading-tight">{currentMatch.googleData.title}</h3>
+
+            <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <MapPin size={18} />
+                    </div>
+                    <p className="text-base font-bold text-slate-700 leading-tight">{currentMatch.googleData.street}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-2 bg-amber-50 rounded-lg text-amber-500">
+                        <Star size={18} className="fill-amber-500" />
+                    </div>
+                    <p className="text-sm text-slate-700 font-extrabold">{currentMatch.googleData.totalScore} <span className="text-slate-400 font-bold ml-1">({currentMatch.googleData.reviewsCount} reviews)</span></p>
+                </div>
+                {currentMatch.googleData.phone && (
+                <div className="flex items-center gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <Phone size={18} />
+                    </div>
+                    <p className="text-sm font-bold text-slate-600">{currentMatch.googleData.phone}</p>
+                </div>
+                )}
+                {currentMatch.googleData.website && (
+                <div className="flex items-center gap-4">
+                    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <Globe size={18} />
+                    </div>
+                    <p className="text-sm font-bold text-indigo-600 truncate max-w-[200px]">{currentMatch.googleData.website.replace('https://', '')}</p>
+                </div>
+                )}
+            </div>
+          </div>
+
+          <div className="mt-12 pt-8 border-t border-slate-50">
+            <a href={currentMatch.googleData.url} target="_blank" className="text-emerald-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-1.5 hover:translate-x-1 transition-all">
+              Live Map View <ExternalLink size={12} />
             </a>
           </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex flex-col items-center gap-6 mt-4">
-        <div className="flex items-center gap-4 bg-white p-4 rounded-3xl shadow-lg border border-gray-100">
+      {/* Floating Action Menu */}
+      <div className="flex flex-col items-center gap-10 mt-6 relative pb-10">
+        <div className="glass p-5 rounded-[2.5rem] shadow-2xl flex items-center gap-6 border border-white/80 ring-1 ring-slate-100">
           <button 
             onClick={() => handleAction('rejected')}
-            className="flex flex-col items-center gap-1 px-8 py-3 rounded-2xl hover:bg-red-50 text-red-600 transition-all active:scale-95 group"
+            className="group flex flex-col items-center gap-2 w-28 py-4 rounded-3xl hover:bg-red-50 text-red-400 hover:text-red-600 transition-all active:scale-[0.85] active:bg-red-100"
           >
-            <XCircle size={32} className="group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">REJECT (N)</span>
+            <XCircle size={36} className="group-hover:rotate-12 transition-transform" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Reject (N)</span>
           </button>
           
-          <div className="h-12 w-px bg-gray-100" />
+          <div className="h-16 w-px bg-slate-100" />
           
           <button 
             onClick={() => handleAction('confirmed')}
-            className="flex flex-col items-center gap-1 px-12 py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white transition-all shadow-xl shadow-green-100 active:scale-95 group"
+            className="group flex flex-col items-center gap-2 w-48 py-6 rounded-[2rem] bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-2xl shadow-indigo-200 active:scale-95 active:shadow-none"
           >
-            <CheckCircle2 size={40} className="group-hover:scale-110 transition-transform" />
-            <span className="text-sm font-black uppercase tracking-widest">CONFIRM (Y)</span>
+            <CheckCircle2 size={44} className="group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-black uppercase tracking-[0.2em]">Confirm (Y)</span>
           </button>
           
-          <div className="h-12 w-px bg-gray-100" />
+          <div className="h-16 w-px bg-slate-100" />
 
           <button 
             onClick={() => handleAction('skipped')}
-            className="flex flex-col items-center gap-1 px-8 py-3 rounded-2xl hover:bg-gray-100 text-gray-500 transition-all active:scale-95 group"
+            className="group flex flex-col items-center gap-2 w-28 py-4 rounded-3xl hover:bg-slate-100 text-slate-300 hover:text-slate-600 transition-all active:scale-[0.85]"
           >
-            <SkipForward size={32} className="group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">SKIP (S)</span>
+            <SkipForward size={36} className="group-hover:translate-x-1 transition-transform" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Skip (S)</span>
           </button>
         </div>
 
-        <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-600 transition-colors py-2 px-4 rounded-full border border-gray-100 hover:border-blue-100">
-          <Search size={16} /> Search for Better Match (E)
-        </button>
-        
-        <p className="text-[10px] text-gray-400 font-mono">
-          Shortcuts: Y=Confirm | N=Reject | S=Skip | E=Search | ←→=Navigate
-        </p>
+        <div className="flex flex-col items-center gap-3">
+            <button className="group flex items-center gap-3 px-8 py-3 bg-white border border-slate-100 hover:border-indigo-100 rounded-2xl text-[11px] font-black text-slate-400 hover:text-indigo-600 transition-all shadow-sm hover:shadow-xl active:scale-95">
+                <Search size={16} className="group-hover:scale-110 transition-transform" /> 
+                Manual Research (E)
+            </button>
+            <div className="flex items-center gap-4 text-[9px] font-black text-slate-300 uppercase tracking-[0.25em]">
+                <span>Shortcuts</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-400">Y</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-400">N</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-400">S</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-400">← →</span>
+            </div>
+        </div>
       </div>
     </div>
   );

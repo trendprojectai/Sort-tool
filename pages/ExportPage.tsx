@@ -1,17 +1,21 @@
 
 import React, { useState } from 'react';
-import { Download, CloudUpload, Database, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, CloudUpload, Database, CheckCircle2, AlertCircle, Loader2, Link2, Check } from 'lucide-react';
 import { useStore } from '../store';
 import { generateExportData } from '../lib/utils';
 
 const ExportPage: React.FC = () => {
   const job = useStore(state => state.currentJob());
+  const supabaseConfig = useStore(state => state.supabaseConfig);
   const [isExporting, setIsExporting] = useState(false);
   const [pushStatus, setPushStatus] = useState<'idle' | 'pushing' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const matches = job?.matches || [];
   const confirmedMatches = matches.filter(m => m.status === 'confirmed' || m.status === 'auto_confirmed');
   
+  const isSupabaseLinked = !!(supabaseConfig.url && supabaseConfig.key && supabaseConfig.tableName);
+
   const handleCsvDownload = () => {
     if (confirmedMatches.length === 0) return;
     setIsExporting(true);
@@ -35,39 +39,80 @@ const ExportPage: React.FC = () => {
   };
 
   const handleSupabasePush = async () => {
+    if (!isSupabaseLinked || confirmedMatches.length === 0) return;
+
     setPushStatus('pushing');
-    // Simulate Supabase push
-    setTimeout(() => {
+    setErrorMessage(null);
+    const data = generateExportData(confirmedMatches);
+
+    try {
+      // Normalize URL: remove trailing slash and ensure rest/v1 prefix
+      const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
+      const endpoint = `${baseUrl}/rest/v1/${supabaseConfig.tableName}`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'apikey': supabaseConfig.key,
+          'Authorization': `Bearer ${supabaseConfig.key}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        let message = errorBody.message || `Server responded with ${response.status}: ${response.statusText}`;
+        
+        // Specific help for schema mismatch
+        if (message.toLowerCase().includes('column') && message.toLowerCase().includes('not found')) {
+          message = `Schema mismatch: ${message}. Visit Settings to use the Table Schema Helper.`;
+        }
+        
+        throw new Error(message);
+      }
+
       setPushStatus('success');
-    }, 2000);
+      setTimeout(() => setPushStatus('idle'), 3000);
+    } catch (error: any) {
+      console.error('Supabase Sync Error:', error);
+      setPushStatus('error');
+      setErrorMessage(error.message === 'Failed to fetch' 
+        ? 'Connection blocked. Check your Supabase URL, API Key, or CORS settings.' 
+        : error.message);
+      
+      setTimeout(() => setPushStatus('idle'), 8000); // Longer delay for complex errors
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-10">
-        <h2 className="text-3xl font-black text-gray-900 mb-3">Finalize & Export</h2>
-        <p className="text-gray-500 text-lg">You have {confirmedMatches.length} confirmed matches ready for delivery.</p>
+        <h2 className="text-4xl font-black text-slate-800 tracking-tight mb-3">Finalize & Export</h2>
+        <p className="text-slate-500 text-lg font-medium">You have <span className="text-indigo-600 font-black">{confirmedMatches.length}</span> confirmed matches ready for delivery.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* CSV Export Card */}
-        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-xl flex flex-col justify-between">
+        <div className="bg-white/50 backdrop-blur-md rounded-[2.5rem] p-8 border border-white/60 shadow-xl flex flex-col justify-between hover:shadow-2xl transition-all group">
           <div>
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
-              <Download size={24} />
+            <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 shadow-sm group-hover:scale-110 transition-transform">
+              <Download size={28} />
             </div>
-            <h3 className="text-xl font-bold mb-2">Download CSV</h3>
-            <p className="text-sm text-gray-500 mb-6">Get a standard CSV file formatted with all 25 specific columns required for your database.</p>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Download CSV</h3>
+            <p className="text-sm text-slate-500 font-medium mb-6 leading-relaxed">Get a standard CSV file formatted with all specific columns required for your database schema.</p>
             
             <ul className="space-y-3 mb-8">
-              <li className="flex items-center gap-2 text-xs text-gray-600">
-                <CheckCircle2 size={14} className="text-green-500" /> UTF-8 Encoded
+              <li className="flex items-center gap-3 text-xs font-bold text-slate-600">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> UTF-8 Standard Encoding
               </li>
-              <li className="flex items-center gap-2 text-xs text-gray-600">
-                <CheckCircle2 size={14} className="text-green-500" /> Includes Confidence Scores
+              <li className="flex items-center gap-3 text-xs font-bold text-slate-600">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Full Confidence Metadata
               </li>
-              <li className="flex items-center gap-2 text-xs text-gray-600">
-                <CheckCircle2 size={14} className="text-green-500" /> Standard Data Mapping
+              <li className="flex items-center gap-3 text-xs font-bold text-slate-600">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Multi-Source IDs Included
               </li>
             </ul>
           </div>
@@ -75,7 +120,7 @@ const ExportPage: React.FC = () => {
           <button 
             onClick={handleCsvDownload}
             disabled={confirmedMatches.length === 0 || isExporting}
-            className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-xl shadow-gray-200 flex items-center justify-center gap-2"
+            className="w-full py-5 bg-slate-900 text-white rounded-[1.25rem] font-black text-base hover:bg-indigo-600 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-40"
           >
             {isExporting ? <Loader2 className="animate-spin" size={20} /> : <Download size={20} />}
             Download .csv
@@ -83,60 +128,98 @@ const ExportPage: React.FC = () => {
         </div>
 
         {/* Supabase Card */}
-        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-xl flex flex-col justify-between">
+        <div className="bg-white/50 backdrop-blur-md rounded-[2.5rem] p-8 border border-white/60 shadow-xl flex flex-col justify-between hover:shadow-2xl transition-all group">
           <div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 mb-6">
-              <CloudUpload size={24} />
+            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 shadow-sm group-hover:scale-110 transition-transform">
+              <CloudUpload size={28} />
             </div>
-            <h3 className="text-xl font-bold mb-2">Supabase Sync</h3>
-            <p className="text-sm text-gray-500 mb-6">Push directly to your Supabase instance. Existing records will be updated based on Google Place ID.</p>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Supabase Sync</h3>
+            <p className="text-sm text-slate-500 font-medium mb-6 leading-relaxed">Push directly to your Supabase instance. Existing records will be updated based on Google Place ID.</p>
             
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-8">
+            <div className={`p-4 rounded-2xl border mb-8 transition-colors ${isSupabaseLinked ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                <div className="flex items-center justify-between mb-2">
-                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Configuration</span>
-                 <span className="text-[10px] font-bold text-red-500">Not Linked</span>
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configuration Status</span>
+                 <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${isSupabaseLinked ? 'text-emerald-600' : 'text-amber-500'}`}>
+                   {isSupabaseLinked ? <><Check size={10} /> Linked</> : <><AlertCircle size={10} /> Not Configured</>}
+                 </span>
                </div>
-               <p className="text-xs text-gray-500 italic">Please configure Supabase credentials in the Settings panel to enable direct sync.</p>
+               {isSupabaseLinked ? (
+                 <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                   <Link2 size={14} className="text-emerald-500" />
+                   <span className="truncate">{supabaseConfig.tableName} @ {supabaseConfig.url.replace(/https?:\/\//, '')}</span>
+                 </div>
+               ) : (
+                 <p className="text-xs text-slate-400 font-medium italic">Please configure Supabase credentials in Settings to enable direct sync.</p>
+               )}
             </div>
           </div>
           
           <button 
             onClick={handleSupabasePush}
-            disabled={true}
-            className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!isSupabaseLinked || confirmedMatches.length === 0 || pushStatus === 'pushing'}
+            className={`w-full py-5 rounded-[1.25rem] font-black text-base transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-40 ${
+              pushStatus === 'success' ? 'bg-emerald-100 text-emerald-700' : 
+              pushStatus === 'error' ? 'bg-red-100 text-red-700 border-red-200' :
+              'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
           >
-            <Database size={20} />
-            Push to Supabase
+            {pushStatus === 'pushing' ? <Loader2 className="animate-spin" size={20} /> : 
+             pushStatus === 'success' ? <CheckCircle2 size={20} /> : 
+             pushStatus === 'error' ? <AlertCircle size={20} /> :
+             <Database size={20} />}
+            {pushStatus === 'pushing' ? 'Syncing...' : 
+             pushStatus === 'success' ? 'Sync Successful' : 
+             pushStatus === 'error' ? 'Sync Failed' :
+             'Push to Supabase'}
           </button>
+          
+          {errorMessage && (
+            <div className="mt-3 bg-red-50 p-4 rounded-xl border border-red-100 animate-in fade-in">
+              <p className="text-[11px] font-black text-red-600 leading-relaxed uppercase tracking-tight">
+                {errorMessage}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Export Preview */}
-      <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-        <h4 className="font-bold text-sm text-gray-400 uppercase tracking-widest mb-4">Export Preview (Top 3)</h4>
-        <div className="overflow-x-auto">
+      <div className="bg-white/40 border border-slate-100 rounded-[2.5rem] p-8 shadow-sm">
+        <h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-6 px-2">Export Data Preview (Sample)</h4>
+        <div className="overflow-x-auto rounded-2xl border border-slate-50 bg-white">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-50">
-                <th className="px-4 py-3 text-gray-400">name</th>
-                <th className="px-4 py-3 text-gray-400">address</th>
-                <th className="px-4 py-3 text-gray-400">rating</th>
-                <th className="px-4 py-3 text-gray-400">confidence</th>
+            <thead className="bg-slate-50/50">
+              <tr className="border-b border-slate-100">
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Restaurant Name</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Street Address</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Rating</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Category</th>
               </tr>
             </thead>
-            <tbody>
-              {generateExportData(confirmedMatches).slice(0, 3).map((row, i) => (
-                <tr key={i} className="border-b border-gray-50 last:border-0">
-                  <td className="px-4 py-3 font-bold">{row.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{row.address}</td>
-                  <td className="px-4 py-3">{row.rating} ★</td>
-                  <td className="px-4 py-3">
-                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">
-                      {row.match_confidence}
+            <tbody className="divide-y divide-slate-50">
+              {generateExportData(confirmedMatches).slice(0, 4).map((row, i) => (
+                <tr key={i} className="hover:bg-slate-50/30 transition-colors">
+                  <td className="px-6 py-4 font-extrabold text-slate-800">{row.name}</td>
+                  <td className="px-6 py-4 text-slate-500 font-medium">{row.address}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-1 font-black text-amber-500">
+                      {row.rating} ★
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2.5 py-1 rounded-lg font-black text-[10px] uppercase tracking-wider bg-slate-100 text-slate-600">
+                      {row.category_name}
                     </span>
                   </td>
                 </tr>
               ))}
+              {confirmedMatches.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-300 font-bold italic">
+                    No confirmed matches to preview.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
