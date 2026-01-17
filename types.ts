@@ -51,6 +51,14 @@ export interface Match {
   method: string;
   status: MatchStatus;
   reviewed_at?: string;
+  
+  // Secondary enrichment fields
+  cover_image?: string | null;
+  menu_url?: string | null;
+  menu_pdf_url?: string | null;
+  gallery_images?: string[];
+  enriched_phone?: string | null;
+  enriched_opening_hours?: Record<string, string> | null;
 }
 
 export interface MapSpot {
@@ -88,6 +96,7 @@ export interface Job {
   mapSpots: MapSpot[];
   flaggedItems: FlaggedItem[];
   currentReviewIndex: number;
+  enriched_at?: string;
 }
 
 export interface AppSettings {

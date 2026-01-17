@@ -19,6 +19,7 @@ interface AppState {
   createJob: (name: string, description?: string) => void;
   setCurrentJobId: (id: string) => void;
   updateCurrentJob: (updates: Partial<Job>) => void;
+  updateJobWithEnrichment: (jobId: string, updatedJob: Job) => void;
   
   setOSMData: (data: OSMRestaurant[]) => void;
   setGoogleData: (data: GoogleRestaurant[]) => void;
@@ -41,6 +42,9 @@ interface AppState {
   // Config Actions
   setSupabaseConfig: (config: SupabaseConfig) => void;
 
+  // Theme Actions
+  toggleTheme: () => void;
+
   // Secondary Scrape Actions
   pushToSecondary: (id: string) => void;
   setSecondaryStatus: (status: 'idle' | 'processing' | 'completed') => void;
@@ -52,10 +56,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light'
 };
 
-const persist = (jobs: Job[], currentJobId: string | null, unmatchedCache: UnmatchedCacheEntry[], supabaseConfig: SupabaseConfig) => {
+const persist = (jobs: Job[], currentJobId: string | null, unmatchedCache: UnmatchedCacheEntry[], supabaseConfig: SupabaseConfig, settings: AppSettings) => {
   localStorage.setItem('rmPro_jobs', JSON.stringify(jobs));
   localStorage.setItem('rmPro_unmatchedCache', JSON.stringify(unmatchedCache));
   localStorage.setItem('rmPro_supabaseConfig', JSON.stringify(supabaseConfig));
+  localStorage.setItem('rmPro_settings', JSON.stringify(settings));
   if (currentJobId) {
     localStorage.setItem('rmPro_currentJobId', currentJobId);
   }
@@ -67,7 +72,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentJobId: localStorage.getItem('rmPro_currentJobId') || null,
   pushedToSecondaryId: localStorage.getItem('rmPro_pushedToSecondaryId') || null,
   secondaryProcessingStatus: 'idle',
-  settings: DEFAULT_SETTINGS,
+  settings: JSON.parse(localStorage.getItem('rmPro_settings') || JSON.stringify(DEFAULT_SETTINGS)),
   supabaseConfig: JSON.parse(localStorage.getItem('rmPro_supabaseConfig') || '{"url": "", "key": "", "tableName": "restaurants"}'),
 
   currentJob: () => {
@@ -93,7 +98,7 @@ export const useStore = create<AppState>((set, get) => ({
       currentReviewIndex: 0
     };
     const nextJobs = [newJob, ...state.jobs];
-    persist(nextJobs, newJob.id, state.unmatchedCache, state.supabaseConfig);
+    persist(nextJobs, newJob.id, state.unmatchedCache, state.supabaseConfig, state.settings);
     return {
       jobs: nextJobs,
       currentJobId: newJob.id
@@ -111,8 +116,14 @@ export const useStore = create<AppState>((set, get) => ({
         ? { ...j, ...updates, updated_at: new Date().toISOString() } 
         : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
+  }),
+
+  updateJobWithEnrichment: (jobId, updatedJob) => set((state) => {
+    const nextJobs = state.jobs.map(j => j.id === jobId ? updatedJob : j);
+    persist(nextJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
+    return { jobs: nextJobs };
   }),
 
   setOSMData: (data) => get().updateCurrentJob({ osmData: data }),
@@ -137,7 +148,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, matches: newMatches, updated_at: new Date().toISOString() } : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
   }),
 
@@ -145,7 +156,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, currentReviewIndex: index, updated_at: new Date().toISOString() } : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
   }),
 
@@ -162,7 +173,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, mapSpots: [...j.mapSpots, newSpot], updated_at: new Date().toISOString() } : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
   }),
 
@@ -182,7 +193,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJobs = state.jobs.map(j => 
       j.id === state.currentJobId ? { ...j, flaggedItems: [...j.flaggedItems, newItem], updated_at: new Date().toISOString() } : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
   }),
 
@@ -214,20 +225,20 @@ export const useStore = create<AppState>((set, get) => ({
         updated_at: new Date().toISOString() 
       } : j
     );
-    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig);
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
     return { jobs: newJobs };
   }),
 
   resetApp: () => {
     localStorage.clear();
-    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, unmatchedCache: [], supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
+    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, unmatchedCache: [], settings: DEFAULT_SETTINGS, supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
   },
 
   saveToPersistence: async () => {
-    const { jobs, currentJobId, unmatchedCache, supabaseConfig } = get();
+    const { jobs, currentJobId, unmatchedCache, supabaseConfig, settings } = get();
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        persist(jobs, currentJobId, unmatchedCache, supabaseConfig);
+        persist(jobs, currentJobId, unmatchedCache, supabaseConfig, settings);
         resolve();
       }, 600);
     });
@@ -290,6 +301,13 @@ export const useStore = create<AppState>((set, get) => ({
   setSupabaseConfig: (config) => set((state) => {
     localStorage.setItem('rmPro_supabaseConfig', JSON.stringify(config));
     return { supabaseConfig: config };
+  }),
+
+  toggleTheme: () => set((state) => {
+    const nextTheme = state.settings.theme === 'light' ? 'dark' : 'light';
+    const nextSettings = { ...state.settings, theme: nextTheme };
+    localStorage.setItem('rmPro_settings', JSON.stringify(nextSettings));
+    return { settings: nextSettings };
   }),
 
   pushToSecondary: (id) => {

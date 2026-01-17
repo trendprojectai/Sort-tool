@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Database, 
   Map as MapIcon, 
@@ -20,7 +19,13 @@ import {
   Send,
   FileText,
   Zap,
-  CheckCircle
+  CheckCircle,
+  Image as ImageIcon,
+  ExternalLink,
+  Wifi,
+  WifiOff,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useStore } from './store';
 import ImportPage from './pages/ImportPage';
@@ -31,14 +36,20 @@ import ExportPage from './pages/ExportPage';
 import HistoryPage from './pages/HistoryPage';
 import UnmatchedPage from './pages/UnmatchedPage';
 import SettingsPage from './pages/SettingsPage';
+import SecondaryEnrichmentSection from './components/SecondaryEnrichmentSection';
+import { pythonServerManager } from './lib/pythonServerManager';
 
 type MainSection = 'primary' | 'secondary' | 'export' | 'map' | 'history' | 'settings';
 type SubTab = 'import' | 'matching' | 'review' | 'unmatched';
+type ApiStatus = 'unknown' | 'online' | 'offline' | 'checking';
 
+// Main Application Component
 const App: React.FC = () => {
   const [mainSection, setMainSection] = useState<MainSection>('primary');
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('import');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('unknown');
+  
   const { 
     currentJob, 
     jobs, 
@@ -47,12 +58,25 @@ const App: React.FC = () => {
     saveToPersistence, 
     pushToSecondary, 
     pushedToSecondaryId,
-    secondaryProcessingStatus,
-    setSecondaryStatus
+    settings,
+    toggleTheme
   } = useStore();
   
   const job = currentJob();
   const secondaryJob = jobs.find(j => j.id === pushedToSecondaryId);
+  const isDarkMode = settings.theme === 'dark';
+
+  const checkApiHealth = async () => {
+    setApiStatus('checking');
+    const isHealthy = await pythonServerManager.checkServerHealth();
+    setApiStatus(isHealthy ? 'online' : 'offline');
+  };
+
+  useEffect(() => {
+    if (mainSection === 'secondary') {
+      checkApiHealth();
+    }
+  }, [mainSection]);
 
   const handleSave = async () => {
     setSaveStatus('saving');
@@ -72,15 +96,7 @@ const App: React.FC = () => {
       pushToSecondary(job.id);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 1500);
-      // Optional: auto-navigate to secondary or show toast
     }
-  };
-
-  const handleRunSecondaryProcess = () => {
-    setSecondaryStatus('processing');
-    setTimeout(() => {
-      setSecondaryStatus('completed');
-    }, 4000);
   };
 
   const primaryTabs = [
@@ -98,356 +114,178 @@ const App: React.FC = () => {
     { id: 'history', label: 'History', icon: HistoryIcon },
   ];
 
+  // Base64 data URI for the bubbly "Cravey" logo
+  const craveyLogoUri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='40' viewBox='0 0 140 40'%3E%3Ctext x='0' y='32' font-family='Arial Black, sans-serif' font-weight='900' font-size='32' fill='black' style='letter-spacing: -2px;'%3ECravey%3C/text%3E%3C/svg%3E";
+
   return (
-    <div className="min-h-screen flex bg-slate-50/50">
+    <div className={`min-h-screen flex ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
       {/* Sidebar Navigation */}
-      <aside className="w-72 fixed h-full z-[60] bg-white border-r border-slate-200 flex flex-col p-6 shadow-sm">
-        {/* Sidebar Branding */}
-        <div className="mb-10 px-2">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-              <Database size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h1 className="font-black text-xl tracking-tighter text-slate-800">RM Pro</h1>
-              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">v1.1.0 SOHO 1</span>
-            </div>
+      <aside className={`w-72 border-r flex flex-col shrink-0 ${isDarkMode ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="p-8">
+          <div className="mb-10 flex flex-col">
+            <img src={craveyLogoUri} alt="Cravey" className={`h-8 w-auto object-contain self-start ${isDarkMode ? 'invert' : ''}`} />
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.25em] ml-0.5 mt-1 italic opacity-80">
+              V0.5 Push
+            </p>
           </div>
           
-          {job && (
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 relative group">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Project</p>
-              <p className="text-sm font-black text-slate-800 truncate">{job.name}</p>
-              
-              <div className="absolute top-full left-0 mt-2 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl py-2 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all z-[70] origin-top">
-                <div className="px-4 py-2 border-b border-slate-50 mb-1">
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Switch Project</p>
-                </div>
-                {jobs.map(j => (
-                  <button 
-                    key={j.id} 
-                    onClick={() => { setCurrentJobId(j.id); setMainSection('primary'); setActiveSubTab('review'); }}
-                    className={`w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center justify-between transition-colors ${j.id === job?.id ? 'text-indigo-600 font-bold bg-indigo-50/50' : 'text-slate-600'}`}
-                  >
-                    <span className="truncate">{j.name}</span>
-                    {j.id === job?.id && <Check size={14} />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Sidebar Main Links */}
-        <nav className="flex-1 space-y-2">
-          <p className="px-3 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Navigation</p>
-          {sidebarItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = mainSection === item.id;
-            return (
+          <nav className="space-y-2">
+            {sidebarItems.map(item => (
               <button
                 key={item.id}
-                disabled={item.disabled}
                 onClick={() => setMainSection(item.id as MainSection)}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-bold transition-all ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100'
-                    : item.disabled
-                      ? 'text-slate-300 cursor-not-allowed opacity-50'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                disabled={item.disabled}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                  mainSection === item.id 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200/20' 
+                    : item.disabled ? 'opacity-30 cursor-not-allowed text-slate-400' : 'hover:bg-slate-100 text-slate-500'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                  {item.label}
-                </div>
-                {isActive && <ChevronRight size={14} />}
+                <item.icon size={20} />
+                {item.label}
               </button>
-            );
-          })}
-        </nav>
+            ))}
+          </nav>
+        </div>
 
-        {/* Sidebar Footer */}
-        <div className="pt-6 border-t border-slate-100 mt-auto space-y-2">
-          <button 
+        <div className="mt-auto p-8 space-y-2">
+          <button
             onClick={() => setMainSection('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
-              mainSection === 'settings' 
-                ? 'bg-slate-900 text-white shadow-xl' 
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              mainSection === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200/20' : 'hover:bg-slate-100 text-slate-500'
             }`}
           >
-            <SettingsIcon size={18} />
+            <SettingsIcon size={20} />
             Settings
           </button>
-          <button 
-            onClick={resetApp}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all"
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold hover:bg-slate-100 transition-all text-slate-500"
           >
-            <RefreshCw size={18} />
-            Factory Reset
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 ml-72 min-h-screen flex flex-col relative overflow-x-hidden">
-        
-        {/* Main Header (Context-aware for Primary Scrape) */}
-        {mainSection === 'primary' && (
-          <header className="sticky top-0 z-50 px-8 py-4 bg-slate-50/80 backdrop-blur-md border-b border-slate-200">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button 
-                  onClick={handleStartNewJob}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white hover:bg-indigo-600 rounded-xl text-xs font-black transition-all shadow-lg active:scale-95"
-                >
-                  <PlusCircle size={16} />
-                  New Job
-                </button>
-                <div className="h-6 w-px bg-slate-200" />
-                <nav className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                  {primaryTabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        disabled={tab.disabled}
-                        onClick={() => setActiveSubTab(tab.id as SubTab)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                          activeSubTab === tab.id
-                            ? 'bg-slate-100 text-indigo-600'
-                            : tab.disabled
-                              ? 'text-slate-300 cursor-not-allowed opacity-50'
-                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Icon size={14} />
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </nav>
-                <div className="h-6 w-px bg-slate-200" />
-                <button 
-                  onClick={handlePushToSecondary}
-                  disabled={!job || job.matches.length === 0}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-black transition-all disabled:opacity-50"
-                >
-                  <Send size={16} />
-                  Push to Secondary
-                </button>
-              </div>
-
-              <button 
-                onClick={handleSave}
-                disabled={saveStatus === 'saving'}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border shadow-sm ${
-                  saveStatus === 'saving' 
-                    ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-wait'
-                    : saveStatus === 'saved'
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200 hover:text-indigo-600'
-                }`}
-              >
-                {saveStatus === 'saving' ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Saving
-                  </>
-                ) : saveStatus === 'saved' ? (
-                  <>
-                    <Check size={14} />
-                    Saved
-                  </>
-                ) : (
-                  <>
-                    <Save size={14} />
-                    Save Changes
-                  </>
-                )}
-              </button>
-            </div>
-          </header>
-        )}
-
-        {/* Global Header for non-primary sections */}
-        {mainSection !== 'primary' && mainSection !== 'settings' && mainSection !== 'map' && (
-           <header className="sticky top-0 z-50 px-8 py-4 bg-slate-50/80 backdrop-blur-md border-b border-slate-200">
-             <div className="max-w-7xl mx-auto flex items-center justify-between">
-                <h2 className="font-black text-slate-800 capitalize tracking-tight text-xl">{mainSection.replace('_', ' ')}</h2>
-                <div className="flex items-center gap-4">
-                  {mainSection === 'secondary' && secondaryJob && (
-                     <div className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
-                       <FileText size={12} /> Working File: {secondaryJob.name}
-                     </div>
-                  )}
-                  <button 
-                    onClick={handleSave}
-                    disabled={saveStatus === 'saving'}
-                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border shadow-sm ${
-                      saveStatus === 'saving' 
-                        ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-wait'
-                        : saveStatus === 'saved'
-                          ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                          : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200 hover:text-indigo-600'
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* Top Header Bar */}
+        <header className={`h-20 border-b flex items-center justify-between px-10 shrink-0 ${isDarkMode ? 'bg-slate-900/30 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            {mainSection === 'primary' && (
+              <>
+                {primaryTabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveSubTab(tab.id as SubTab)}
+                    disabled={tab.disabled}
+                    className={`flex items-center gap-2 h-20 border-b-2 font-bold px-2 transition-all ${
+                      activeSubTab === tab.id 
+                        ? 'border-indigo-600 text-indigo-600' 
+                        : tab.disabled ? 'opacity-30 border-transparent text-slate-400' : 'border-transparent text-slate-400 hover:text-slate-600'
                     }`}
                   >
-                    {saveStatus === 'saving' ? <Loader2 size={14} className="animate-spin" /> : saveStatus === 'saved' ? <Check size={14} /> : <Save size={14} />}
-                    {saveStatus === 'saving' ? 'Saving' : saveStatus === 'saved' ? 'Saved' : 'Save Changes'}
+                    <tab.icon size={18} />
+                    {tab.label}
                   </button>
-                </div>
-             </div>
-           </header>
-        )}
+                ))}
+                
+                {/* Push to Secondary Action Button */}
+                <button
+                  onClick={handlePushToSecondary}
+                  disabled={!job || job.matches.length === 0}
+                  className="flex items-center gap-2 h-20 border-b-2 border-transparent font-bold px-4 transition-all text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed ml-4 border-l border-slate-100"
+                >
+                  <Sparkles size={18} className="text-indigo-400" />
+                  <span className="whitespace-nowrap">Push to Secondary</span>
+                </button>
+              </>
+            )}
+            {mainSection !== 'primary' && (
+              <h2 className="text-xl font-black capitalize tracking-tight">{mainSection} View</h2>
+            )}
+          </div>
 
-        {/* Main Content Body */}
-        <div className={`flex-1 ${mainSection === 'map' ? 'p-0' : 'p-8'} animate-in fade-in slide-in-from-right-4 duration-500`}>
+          <div className="flex items-center gap-4">
+            {job && (
+              <button 
+                onClick={handleSave}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${
+                  saveStatus === 'saved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : 
+                 saveStatus === 'saved' ? <Check size={16} /> : <Save size={16} />}
+                {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save Progress'}
+              </button>
+            )}
+            <button 
+              onClick={handleStartNewJob}
+              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95"
+            >
+              <PlusCircle size={18} />
+              New Workspace
+            </button>
+          </div>
+        </header>
+
+        {/* View Routing Area */}
+        <main className="flex-1 overflow-y-auto p-10 bg-slate-50/20">
           {mainSection === 'primary' && (
-            <div className="max-w-7xl mx-auto">
+            <>
               {activeSubTab === 'import' && <ImportPage onNext={() => setActiveSubTab('matching')} />}
               {activeSubTab === 'matching' && <MatchingPage onNext={() => setActiveSubTab('review')} />}
               {activeSubTab === 'review' && <ReviewPage />}
               {activeSubTab === 'unmatched' && <UnmatchedPage />}
-            </div>
+            </>
           )}
 
           {mainSection === 'secondary' && (
-            <div className="max-w-7xl mx-auto h-full flex flex-col items-center justify-center">
-              {!secondaryJob ? (
-                <div className="text-center p-12 space-y-6">
-                  <div className="w-24 h-24 bg-indigo-50 text-indigo-500 rounded-[2.5rem] flex items-center justify-center shadow-inner mx-auto">
-                    <Sparkles size={48} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Secondary Scrape Engine</h2>
-                    <p className="text-slate-500 font-medium mt-3 leading-relaxed max-w-lg mx-auto">
-                      No file currently staged for secondary processing. Use the "Push to Secondary" action in the Primary Scrape workspace.
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => setMainSection('primary')}
-                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all"
-                  >
-                    Return to Primary
-                  </button>
-                </div>
+            <div className="flex flex-col items-center">
+              <div className="mb-8 flex items-center gap-4 bg-white/50 px-4 py-2 rounded-full border border-slate-100 shadow-sm">
+                 <div className={`w-2 h-2 rounded-full ${apiStatus === 'online' ? 'bg-emerald-500 animate-pulse' : apiStatus === 'offline' ? 'bg-red-500' : 'bg-slate-300'}`} />
+                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                   Cloud Pipeline: {apiStatus}
+                 </span>
+                 {apiStatus !== 'online' && (
+                   <button onClick={checkApiHealth} className="text-indigo-600 hover:text-indigo-800 transition-colors ml-2">
+                     <RefreshCw size={12} className={apiStatus === 'checking' ? 'animate-spin' : ''} />
+                   </button>
+                 )}
+              </div>
+              {secondaryJob ? (
+                <SecondaryEnrichmentSection job={secondaryJob} onComplete={() => setMainSection('export')} />
               ) : (
-                <div className="w-full max-w-4xl animate-in zoom-in-95 duration-500">
-                  <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-[2rem] mb-8 flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white text-emerald-600 rounded-xl flex items-center justify-center shadow-sm">
-                      <CheckCircle size={24} />
-                    </div>
-                    <div>
-                      <h4 className="text-emerald-800 font-black">File has been moved to Secondary Scrape</h4>
-                      <p className="text-emerald-600 text-xs font-medium">Ready for advanced data enrichment and social sentiment analysis.</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-sm">
-                    <div className="flex items-start justify-between mb-10">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                           <FileText size={20} className="text-indigo-600" />
-                           <h3 className="text-2xl font-black text-slate-800">{secondaryJob.name}</h3>
-                        </div>
-                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest pl-8">
-                          STAGED FOR ENRICHMENT • {secondaryJob.matches.length} BASE MATCHES
-                        </p>
-                      </div>
-                      <div className="px-4 py-2 bg-slate-50 rounded-xl text-slate-500 text-xs font-bold">
-                        V1.0 Staging
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-6 mb-10">
-                       <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Baseline Confidence</p>
-                          <p className="text-2xl font-black text-slate-800">84%</p>
-                       </div>
-                       <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Enrichment Source</p>
-                          <p className="text-2xl font-black text-slate-800">Python Script</p>
-                       </div>
-                       <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                          <p className="text-2xl font-black text-slate-800 capitalize">{secondaryProcessingStatus}</p>
-                       </div>
-                    </div>
-
-                    <div className="space-y-4">
-                       {secondaryProcessingStatus === 'idle' && (
-                         <button 
-                            onClick={handleRunSecondaryProcess}
-                            className="w-full py-6 bg-slate-900 text-white rounded-[1.5rem] font-black text-xl hover:bg-indigo-600 shadow-2xl transition-all flex items-center justify-center gap-4 group"
-                          >
-                            <Zap size={24} className="group-hover:text-yellow-400 transition-colors" />
-                            Load & Process Advanced Scraping
-                          </button>
-                       )}
-
-                       {secondaryProcessingStatus === 'processing' && (
-                         <div className="w-full py-12 flex flex-col items-center gap-4 bg-slate-50 rounded-[1.5rem] border border-dashed border-slate-200">
-                            <Loader2 size={48} className="animate-spin text-indigo-600" />
-                            <div className="text-center">
-                              <p className="text-lg font-black text-slate-800">Triggering Python Enrichment Scraper...</p>
-                              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Collecting social metrics and additional attributes</p>
-                            </div>
-                         </div>
-                       )}
-
-                       {secondaryProcessingStatus === 'completed' && (
-                         <div className="space-y-6">
-                           <div className="p-8 bg-emerald-50 text-emerald-800 rounded-[1.5rem] border border-emerald-100 text-center">
-                              <p className="text-xl font-black mb-2">Processing Complete</p>
-                              <p className="text-sm font-medium">Additional data points successfully merged into {secondaryJob.name}.</p>
-                           </div>
-                           <button 
-                             onClick={() => setMainSection('export')}
-                             className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-xl"
-                           >
-                             Proceed to Export <ChevronRight size={20} />
-                           </button>
-                         </div>
-                       )}
-                    </div>
-                  </div>
+                <div className="text-center py-20 bg-white/50 border-2 border-dashed border-slate-200 rounded-[3rem] p-16 max-w-xl mx-auto shadow-sm">
+                   <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-400 mx-auto mb-8">
+                     <Sparkles size={40} />
+                   </div>
+                   <h3 className="text-2xl font-black mb-3">Enrichment Queue Empty</h3>
+                   <p className="text-slate-500 mb-10 leading-relaxed font-medium">Secondary enrichment requires confirmed matches from your primary workspace. Push a job to the cloud from the summary view.</p>
+                   {job && job.matches.length > 0 && (
+                     <button 
+                       onClick={handlePushToSecondary}
+                       className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-indigo-600 transition-all flex items-center gap-3 mx-auto active:scale-95"
+                     >
+                       <Zap size={20} />
+                       Push Workspace to Cloud
+                     </button>
+                   )}
                 </div>
               )}
             </div>
           )}
 
-          {mainSection === 'export' && (
-            <div className="max-w-7xl mx-auto">
-              <ExportPage />
-            </div>
-          )}
-
-          {mainSection === 'history' && (
-            <div className="max-w-7xl mx-auto">
-              <HistoryPage onViewJob={(id) => { setCurrentJobId(id); setMainSection('primary'); setActiveSubTab('review'); }} />
-            </div>
-          )}
-
+          {mainSection === 'export' && <ExportPage />}
           {mainSection === 'map' && <MapPage />}
-          
-          {mainSection === 'settings' && (
-            <div className="max-w-7xl mx-auto">
-              <SettingsPage />
-            </div>
-          )}
-        </div>
-
-        {/* Compact Footer */}
-        <footer className="px-8 py-6 border-t border-slate-200/60 bg-white">
-          <div className="max-w-7xl mx-auto flex justify-between items-center text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-            <p>© 2024 Restaurant Matcher Pro • {job?.name || 'No Active Project'}</p>
-            <p className="text-slate-300">Enterprise Ready • Privacy First</p>
-          </div>
-        </footer>
-      </main>
+          {mainSection === 'history' && <HistoryPage onViewJob={(id) => { setCurrentJobId(id); setMainSection('primary'); setActiveSubTab('review'); }} />}
+          {mainSection === 'settings' && <SettingsPage />}
+        </main>
+      </div>
     </div>
   );
 };
 
+// Default export required for index.tsx
 export default App;
