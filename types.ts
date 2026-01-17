@@ -41,6 +41,17 @@ export interface UnmatchedCacheEntry {
 
 export type Confidence = 'High' | 'Medium' | 'Low' | 'Unmatched';
 export type MatchStatus = 'pending' | 'confirmed' | 'rejected' | 'skipped' | 'auto_confirmed';
+export type VideoInjectionStatus = 'idle' | 'discovering' | 'ready_for_review' | 'injected' | 'error';
+
+export interface VideoDiscoveryResult {
+  id: string;
+  source_url: string;
+  thumbnail_url: string;
+  view_count: number;
+  like_count: number;
+  caption: string;
+  author_handle: string;
+}
 
 export interface Match {
   id?: string;
@@ -59,6 +70,11 @@ export interface Match {
   gallery_images?: string[];
   enriched_phone?: string | null;
   enriched_opening_hours?: Record<string, string> | null;
+
+  // Video Injector fields
+  videoStatus?: VideoInjectionStatus;
+  discoveryResults?: VideoDiscoveryResult[];
+  selectedVideos?: string[]; // IDs of results
 }
 
 export interface MapSpot {

@@ -1,4 +1,3 @@
-
 import { Job, Match } from '../types';
 import Papa from 'papaparse';
 
@@ -77,7 +76,8 @@ export function mergeEnrichedData(job: Job, enrichedData: EnrichedData[]): Job {
 
     // Helper to safely parse JSON strings from Python
     const safeJsonParse = (val: any, fallback: any) => {
-      if (!val) return fallback;
+      if (!val || val === 'null') return fallback;
+      if (typeof val !== 'string') return val || fallback;
       try {
         return JSON.parse(val);
       } catch (e) {
@@ -88,12 +88,12 @@ export function mergeEnrichedData(job: Job, enrichedData: EnrichedData[]): Job {
 
     return {
       ...match,
-      cover_image: enrichment.cover_image,
-      menu_url: enrichment.menu_url,
-      menu_pdf_url: enrichment.menu_pdf_url,
-      gallery_images: safeJsonParse(enrichment.gallery_images, []),
-      enriched_phone: enrichment.phone,
-      enriched_opening_hours: safeJsonParse(enrichment.opening_hours, null),
+      cover_image: enrichment.cover_image || match.cover_image,
+      menu_url: enrichment.menu_url || match.menu_url,
+      menu_pdf_url: enrichment.menu_pdf_url || match.menu_pdf_url,
+      gallery_images: safeJsonParse(enrichment.gallery_images, match.gallery_images || []),
+      enriched_phone: enrichment.phone || match.enriched_phone,
+      enriched_opening_hours: safeJsonParse(enrichment.opening_hours, match.enriched_opening_hours || null),
     };
   });
 

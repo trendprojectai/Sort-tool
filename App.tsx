@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Database, 
@@ -25,7 +26,8 @@ import {
   Wifi,
   WifiOff,
   Moon,
-  Sun
+  Sun,
+  Film
 } from 'lucide-react';
 import { useStore } from './store';
 import ImportPage from './pages/ImportPage';
@@ -36,10 +38,11 @@ import ExportPage from './pages/ExportPage';
 import HistoryPage from './pages/HistoryPage';
 import UnmatchedPage from './pages/UnmatchedPage';
 import SettingsPage from './pages/SettingsPage';
+import VideoInjectorPage from './pages/VideoInjectorPage';
 import SecondaryEnrichmentSection from './components/SecondaryEnrichmentSection';
 import { pythonServerManager } from './lib/pythonServerManager';
 
-type MainSection = 'primary' | 'secondary' | 'export' | 'map' | 'history' | 'settings';
+type MainSection = 'primary' | 'secondary' | 'video' | 'export' | 'map' | 'history' | 'settings';
 type SubTab = 'import' | 'matching' | 'review' | 'unmatched';
 type ApiStatus = 'unknown' | 'online' | 'offline' | 'checking';
 
@@ -58,12 +61,14 @@ const App: React.FC = () => {
     saveToPersistence, 
     pushToSecondary, 
     pushedToSecondaryId,
+    pushedToVideoId,
     settings,
     toggleTheme
   } = useStore();
   
   const job = currentJob();
   const secondaryJob = jobs.find(j => j.id === pushedToSecondaryId);
+  const videoJob = jobs.find(j => j.id === pushedToVideoId);
   const isDarkMode = settings.theme === 'dark';
 
   const checkApiHealth = async () => {
@@ -109,6 +114,7 @@ const App: React.FC = () => {
   const sidebarItems = [
     { id: 'primary', label: 'Primary Scrape', icon: Layers },
     { id: 'secondary', label: 'Secondary Scrape', icon: Sparkles },
+    { id: 'video', label: 'Video Injector', icon: Film },
     { id: 'export', label: 'Export', icon: CloudUpload, disabled: !job || job.matches.length === 0 },
     { id: 'map', label: 'Map View', icon: MapIcon, disabled: !job || job.matches.length === 0 },
     { id: 'history', label: 'History', icon: HistoryIcon },
@@ -124,7 +130,7 @@ const App: React.FC = () => {
         <div className="p-8">
           <div className="mb-10 flex flex-col">
             <img src={craveyLogoUri} alt="Cravey" className={`h-8 w-auto object-contain self-start ${isDarkMode ? 'invert' : ''}`} />
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.25em] ml-0.5 mt-1 italic opacity-80">
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] ml-0.5 mt-1 italic opacity-80">
               V0.5 Push
             </p>
           </div>
@@ -203,7 +209,7 @@ const App: React.FC = () => {
               </>
             )}
             {mainSection !== 'primary' && (
-              <h2 className="text-xl font-black capitalize tracking-tight">{mainSection} View</h2>
+              <h2 className="text-xl font-black capitalize tracking-tight">{mainSection === 'video' ? 'Video Injector' : mainSection} View</h2>
             )}
           </div>
 
@@ -255,7 +261,7 @@ const App: React.FC = () => {
                  )}
               </div>
               {secondaryJob ? (
-                <SecondaryEnrichmentSection job={secondaryJob} onComplete={() => setMainSection('export')} />
+                <SecondaryEnrichmentSection job={secondaryJob} onComplete={() => setMainSection('video')} />
               ) : (
                 <div className="text-center py-20 bg-white/50 border-2 border-dashed border-slate-200 rounded-[3rem] p-16 max-w-xl mx-auto shadow-sm">
                    <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-400 mx-auto mb-8">
@@ -274,6 +280,22 @@ const App: React.FC = () => {
                    )}
                 </div>
               )}
+            </div>
+          )}
+
+          {mainSection === 'video' && (
+            <div className="flex flex-col items-center">
+               {videoJob ? (
+                 <VideoInjectorPage job={videoJob} />
+               ) : (
+                 <div className="text-center py-20 bg-white/50 border-2 border-dashed border-slate-200 rounded-[3rem] p-16 max-w-xl mx-auto shadow-sm">
+                    <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-400 mx-auto mb-8">
+                      <Film size={40} />
+                    </div>
+                    <h3 className="text-2xl font-black mb-3">Video Injector Idle</h3>
+                    <p className="text-slate-500 mb-10 leading-relaxed font-medium">No jobs ready for video injection. Push a completed secondary scrape to begin.</p>
+                 </div>
+               )}
             </div>
           )}
 

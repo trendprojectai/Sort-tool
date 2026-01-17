@@ -1,4 +1,3 @@
-
 import { OSMRestaurant, GoogleRestaurant, Match, Confidence, UnmatchedCacheEntry } from '../types';
 
 export const MANUAL_MATCHES: Record<string, string> = {
@@ -264,16 +263,16 @@ export function generateExportData(matches: Match[]) {
       city: 'London',
       area: 'Soho',
       country: 'GB',
-      cover_image: nullIfEmpty(google.imageUrl),
+      cover_image: nullIfEmpty(match.cover_image || google.imageUrl),
       tiktok_url: null,
       google_place_id: googlePlaceId,
       external_place_id: nullIfEmpty(osm['@id']),
       rating: parseNum(google.totalScore),
       reviews_count: Math.floor(parseNum(google.reviewsCount)),
-      opening_hours: null,
+      opening_hours: match.enriched_opening_hours ? JSON.stringify(match.enriched_opening_hours) : null,
       source: 'OSM + Google Maps',
-      claimed: null, // Using null to avoid "invalid input syntax for type boolean" if target is bool
-      phone: nullIfEmpty(google.phone),
+      claimed: null, 
+      phone: nullIfEmpty(match.enriched_phone || google.phone),
       website: nullIfEmpty(google.website),
       category_name: nullIfEmpty(google.categoryName),
       google_maps_url: nullIfEmpty(google.url),
@@ -281,7 +280,11 @@ export function generateExportData(matches: Match[]) {
       postcode: nullIfEmpty(osm['addr:postcode']),
       match_confidence: match.confidence,
       match_score: parseNum(match.score),
-      match_method: match.method
+      match_method: match.method,
+      menu_url: nullIfEmpty(match.menu_url),
+      menu_pdf_url: nullIfEmpty(match.menu_pdf_url),
+      gallery_images: match.gallery_images ? JSON.stringify(match.gallery_images) : null,
+      enriched_phone: nullIfEmpty(match.enriched_phone)
     };
   });
 }

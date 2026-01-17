@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  CheckCircle, FileText, Zap, Loader2, ChevronRight,
+  CheckCircle, FileText, Zap, Loader2, ChevronRight, ChevronDown,
   Square, AlertCircle, Image as ImageIcon, Layers, Cloud, RefreshCw,
-  Globe, Phone, Hourglass, X, CloudUpload, Database, ArrowRight
+  Globe, Phone, Hourglass, X, CloudUpload, Database, ArrowRight, ExternalLink, Sparkles, Film
 } from 'lucide-react';
 import { Job, Match } from '../types';
 import { pythonServerManager } from '../lib/pythonServerManager';
@@ -27,13 +27,14 @@ interface LogEntry {
   details?: string;
 }
 
-const BATCH_SIZE = 5; // Smaller batches for better feedback and crash prevention
+const BATCH_SIZE = 2; // Reduced batch size for better reliability and avoiding timeouts
 
 export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
-  const { updateJobWithEnrichment, setSecondaryStatus, secondaryProcessingStatus, settings } = useStore();
+  const { updateJobWithEnrichment, setSecondaryStatus, secondaryProcessingStatus, settings, pushToVideoInjector } = useStore();
   const [serverState, setServerState] = useState<ServerState>('checking');
   const [errorMessage, setErrorMessage] = useState('');
   const [injectionStatus, setInjectionStatus] = useState<InjectionStatus>('idle');
+  const [showPreview, setShowPreview] = useState(true);
   
   // Processing state
   const [processedIndex, setProcessedIndex] = useState(0);
@@ -52,11 +53,16 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  // Handle server state based on processing status, avoiding redundant re-checks
   useEffect(() => {
     if (secondaryProcessingStatus === 'completed') {
       setServerState('completed');
-    } else {
-      checkConnection();
+      setProcessedIndex(totalItems);
+    } else if (secondaryProcessingStatus === 'idle') {
+      // Only check connection if we haven't already completed or partially failed
+      if (serverState !== 'completed' && serverState !== 'partial_failure' && serverState !== 'error') {
+        checkConnection();
+      }
     }
   }, [secondaryProcessingStatus]);
 
@@ -169,22 +175,50 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
   const savePartialProgress = () => {
     if (enrichedResultsRef.current.length > 0) {
       const updatedJob = mergeEnrichedData(job, enrichedResultsRef.current);
+      console.log('🔄 Syncing progress to store. Updated Job State:', updatedJob);
       updateJobWithEnrichment(job.id, updatedJob);
+      return updatedJob;
     }
+    return job;
   };
 
   const handleInjectData = async () => {
+    console.log('🚀 Initiating Data Injection...');
+    console.log('Enriched results buffer:', enrichedResultsRef.current);
+    
     setInjectionStatus('injecting');
+    
     // Artificial delay for feedback
     await new Promise(r => setTimeout(r, 1200));
-    savePartialProgress();
-    setInjectionStatus('success');
+    
+    try {
+      // 1. Merge the enriched data into the matches
+      const updatedJob = mergeEnrichedData(job, enrichedResultsRef.current);
+      console.log('✅ Merge successful. Final Job structure:', updatedJob);
+      
+      // 2. Persist to the main store
+      updateJobWithEnrichment(job.id, updatedJob);
+      
+      setInjectionStatus('success');
+      console.log('🎉 Injection cycle complete.');
+    } catch (err) {
+      console.error('❌ Injection failed:', err);
+      setInjectionStatus('idle');
+      setErrorMessage('Failed to merge data. See console for details.');
+    }
   };
 
   const finalizeEnrichment = () => {
-    // For successful completion, we don't save to store until "Inject" is clicked
+    // Save to store immediately to ensure results are visible even if page is refreshed
+    savePartialProgress();
     setSecondaryStatus('completed');
     setServerState('completed');
+    setProcessedIndex(totalItems);
+  };
+
+  const handlePushToVideo = () => {
+    pushToVideoInjector(job.id);
+    onComplete();
   };
 
   const enrichedPreview = useMemo(() => {
@@ -198,6 +232,29 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
       phones: matches.filter(m => m.enriched_phone).length,
     };
   }, [job, serverState]);
+
+  const renderDataRow = (label: string, value: string | null | undefined, isLink = false) => {
+    const exists = !!value && value !== 'null' && value !== '{}' && value !== '[]';
+    return (
+      <div className="flex items-start gap-2 text-[11px]">
+        {exists ? <CheckCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" /> : <X size={14} className="text-slate-300 shrink-0 mt-0.5" />}
+        <div className="flex flex-col">
+          <span className="font-bold text-slate-500 uppercase tracking-tighter text-[9px]">{label}</span>
+          <span className="truncate font-medium text-slate-700 max-w-[200px]">
+            {!exists ? (
+              <span className="text-slate-300 italic">Not found</span>
+            ) : isLink ? (
+              <a href={value!} target="_blank" className="text-indigo-600 hover:underline flex items-center gap-1">
+                {value!.replace(/https?:\/\//, '')} <ExternalLink size={10} />
+              </a>
+            ) : (
+              value
+            )}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="w-full max-w-4xl animate-in zoom-in-95 duration-500">
@@ -398,6 +455,72 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
                 </div>
               )}
 
+              {/* Data Preview Section */}
+              {enrichedResultsRef.current.length > 0 && injectionStatus !== 'success' && (
+                <div className="space-y-4">
+                  <div 
+                    className="flex items-center justify-between px-4 py-2 cursor-pointer group"
+                    onClick={() => setShowPreview(!showPreview)}
+                  >
+                    <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                      📊 Enrichment Preview - Review Before Injecting
+                    </h4>
+                    <button className="text-indigo-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-1 group-hover:underline">
+                      {showPreview ? 'Collapse' : 'Expand'} Details
+                      {showPreview ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                  </div>
+                  
+                  {showPreview && (
+                    <div className="max-h-[400px] overflow-y-auto space-y-3 p-2 bg-slate-50/50 border border-slate-100 rounded-[2rem] custom-scrollbar">
+                      {enrichedResultsRef.current.map((data, idx) => {
+                        const match = job.matches.find(m => {
+                          const google = m.googleData;
+                          const gid = google.google_place_id || 
+                                      google.url?.split('query_place_id=')[1]?.split('&')[0] || 
+                                      `g-${google.title.replace(/\s+/g, '-')}`;
+                          return gid === data.google_place_id;
+                        });
+
+                        const galleryCount = (() => {
+                          if (!data.gallery_images) return 0;
+                          try { return JSON.parse(data.gallery_images).length; } catch { return 0; }
+                        })();
+
+                        const hasOpeningHours = data.opening_hours && data.opening_hours !== 'null' && data.opening_hours !== '{}';
+
+                        return (
+                          <div key={idx} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="flex items-center gap-4 mb-4">
+                              {data.cover_image ? (
+                                <img src={data.cover_image} className="w-12 h-12 rounded-xl object-cover shadow-sm border border-slate-100" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200 border border-slate-100">
+                                  <ImageIcon size={20} />
+                                </div>
+                              )}
+                              <div>
+                                <h5 className="font-black text-slate-800 text-sm leading-tight">{match?.googleData.title || 'Unknown Restaurant'}</h5>
+                                <p className="text-[9px] font-bold text-slate-400 mt-0.5">{data.google_place_id}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 px-2">
+                              {renderDataRow('Cover Image', data.cover_image ? 'Found' : null)}
+                              {renderDataRow('Menu URL', data.menu_url, true)}
+                              {renderDataRow('Menu PDF', data.menu_pdf_url, true)}
+                              {renderDataRow('Gallery', galleryCount > 0 ? `${galleryCount} images found` : null)}
+                              {renderDataRow('Phone', data.phone)}
+                              {renderDataRow('Hours', hasOpeningHours ? 'Found' : null)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-col gap-6">
                 {injectionStatus !== 'success' ? (
                   <div className="flex flex-col items-center">
@@ -414,15 +537,15 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
                 ) : (
                   <div className="flex flex-col sm:flex-row gap-4 animate-in slide-in-from-bottom-4">
                     <button 
-                      disabled
-                      className="flex-1 py-6 bg-emerald-100 text-emerald-700 rounded-[2rem] font-black text-xl flex items-center justify-center gap-3 shadow-inner cursor-default"
+                      onClick={handlePushToVideo}
+                      className="flex-1 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-[0.98] group"
                     >
-                      <CheckCircle size={24} />
-                      Injected ✓
+                      <Film size={24} className="group-hover:animate-bounce" />
+                      Push to Video Injector
                     </button>
                     <button 
                       onClick={onComplete}
-                      className="flex-1 py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-[0.98] group"
+                      className="flex-1 py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-98 group"
                     >
                       Push to Export
                       <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />

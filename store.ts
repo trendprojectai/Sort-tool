@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem, UnmatchedCacheEntry } from './types';
+import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem, UnmatchedCacheEntry, VideoInjectionStatus, VideoDiscoveryResult } from './types';
 import { calculateMatchScore, getConfidence, normalizeName } from './lib/utils';
 
 interface AppState {
@@ -8,6 +8,7 @@ interface AppState {
   unmatchedCache: UnmatchedCacheEntry[];
   currentJobId: string | null;
   pushedToSecondaryId: string | null;
+  pushedToVideoId: string | null;
   secondaryProcessingStatus: 'idle' | 'processing' | 'completed';
   settings: AppSettings;
   supabaseConfig: SupabaseConfig;
@@ -48,6 +49,10 @@ interface AppState {
   // Secondary Scrape Actions
   pushToSecondary: (id: string) => void;
   setSecondaryStatus: (status: 'idle' | 'processing' | 'completed') => void;
+
+  // Video Injector Actions
+  pushToVideoInjector: (id: string) => void;
+  updateMatchVideoStatus: (jobId: string, matchIndex: number, status: VideoInjectionStatus, results?: VideoDiscoveryResult[], selected?: string[]) => void;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -71,6 +76,7 @@ export const useStore = create<AppState>((set, get) => ({
   unmatchedCache: JSON.parse(localStorage.getItem('rmPro_unmatchedCache') || '[]'),
   currentJobId: localStorage.getItem('rmPro_currentJobId') || null,
   pushedToSecondaryId: localStorage.getItem('rmPro_pushedToSecondaryId') || null,
+  pushedToVideoId: localStorage.getItem('rmPro_pushedToVideoId') || null,
   secondaryProcessingStatus: 'idle',
   settings: JSON.parse(localStorage.getItem('rmPro_settings') || JSON.stringify(DEFAULT_SETTINGS)),
   supabaseConfig: JSON.parse(localStorage.getItem('rmPro_supabaseConfig') || '{"url": "", "key": "", "tableName": "restaurants"}'),
@@ -231,7 +237,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   resetApp: () => {
     localStorage.clear();
-    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, unmatchedCache: [], settings: DEFAULT_SETTINGS, supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
+    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, pushedToVideoId: null, unmatchedCache: [], settings: DEFAULT_SETTINGS, supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
   },
 
   saveToPersistence: async () => {
@@ -315,5 +321,37 @@ export const useStore = create<AppState>((set, get) => ({
     set({ pushedToSecondaryId: id, secondaryProcessingStatus: 'idle' });
   },
 
-  setSecondaryStatus: (status) => set({ secondaryProcessingStatus: status })
+  setSecondaryStatus: (status) => set({ secondaryProcessingStatus: status }),
+
+  pushToVideoInjector: (id) => set((state) => {
+    localStorage.setItem('rmPro_pushedToVideoId', id);
+    const newJobs = state.jobs.map(j => {
+      if (j.id === id) {
+        return {
+          ...j,
+          matches: j.matches.map(m => ({ ...m, videoStatus: m.videoStatus || 'idle' }))
+        };
+      }
+      return j;
+    });
+    return { pushedToVideoId: id, jobs: newJobs };
+  }),
+
+  updateMatchVideoStatus: (jobId, matchIndex, status, results, selected) => set((state) => {
+    const newJobs = state.jobs.map(j => {
+      if (j.id === jobId) {
+        const newMatches = [...j.matches];
+        newMatches[matchIndex] = {
+          ...newMatches[matchIndex],
+          videoStatus: status,
+          ...(results && { discoveryResults: results }),
+          ...(selected && { selectedVideos: selected })
+        };
+        return { ...j, matches: newMatches };
+      }
+      return j;
+    });
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
+    return { jobs: newJobs };
+  })
 }));
