@@ -81,6 +81,68 @@ class PythonServerManager {
       throw error;
     }
   }
+
+  async createTertiarySnapshot(csvData: string): Promise<{snapshot_id: string, row_count: number}> {
+    const url = `${API_URL}/tertiary/snapshot`;
+    console.log('🔗 Creating Tertiary Snapshot:', url);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv_data: csvData })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Snapshot Error (${response.status}): ${errorText}`);
+      }
+
+      const result = await response.json();
+      return {
+        snapshot_id: result.snapshot_id,
+        row_count: result.row_count || 0
+      };
+    } catch (error: any) {
+      console.error('❌ Snapshot creation failed:', error);
+      throw error;
+    }
+  }
+
+  async tertiaryEnrich(snapshotId: string): Promise<any[]> {
+    const url = `${API_URL}/tertiary/enrich`;
+    console.log('🔗 Running Tertiary Enrichment:', url);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minute timeout
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ tertiary_snapshot_id: snapshotId }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Tertiary Enrich Error (${response.status}): ${errorText}`);
+      }
+
+      const result = await response.json();
+      return result.results; 
+    } catch (error: any) {
+      console.error('❌ Tertiary enrichment failed:', error);
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export const pythonServerManager = new PythonServerManager();

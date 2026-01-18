@@ -85,11 +85,12 @@ export interface Match {
   cuisine_type?: string | null;
   price_range?: string | null;
   tertiary_status?: TertiaryScrapeStatus;
-  tripadvisor_status?: 'found' | 'not_found' | 'pending';
+  tripadvisor_status?: 'found' | 'not_found' | 'pending' | 'searching' | 'not_attempted';
   tripadvisor_url?: string | null;
   tripadvisor_confidence?: number | null;
   tripadvisor_distance_m?: number | null;
   tripadvisor_match_notes?: string | null;
+  tripadvisor_images?: string[];
 
   // Video Injector fields
   videoStatus?: VideoInjectionStatus;
@@ -134,6 +135,8 @@ export interface Job {
   currentReviewIndex: number;
   enriched_at?: string;
   tertiary_at?: string;
+  tertiary_snapshot_id?: string;
+  tertiary_snapshot_count?: number;
   tertiarySnapshot?: TertiarySnapshotRow[];
   finalEnrichedDataset?: any[];
   activeCsvDataset?: any[];
