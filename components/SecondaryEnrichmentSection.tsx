@@ -1,14 +1,14 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CheckCircle, FileText, Zap, Loader2, ChevronRight, ChevronDown,
   Square, AlertCircle, Image as ImageIcon, Layers, Cloud, RefreshCw,
-  Globe, Phone, Hourglass, X, CloudUpload, Database, ArrowRight, ExternalLink, Sparkles, Film
+  Globe, Phone, Hourglass, X, CloudUpload, Database, ArrowRight, ExternalLink, Sparkles, Film, Compass
 } from 'lucide-react';
 import { Job, Match } from '../types';
 import { pythonServerManager } from '../lib/pythonServerManager';
 import { exportJobToCSV, parseEnrichedCSV, mergeEnrichedData, EnrichedData } from '../lib/secondaryEnrichment';
 import { useStore } from '../store';
+import { generateExportData } from '../lib/utils';
 import Papa from 'papaparse';
 
 interface Props {
@@ -30,7 +30,7 @@ interface LogEntry {
 const BATCH_SIZE = 2; // Reduced batch size for better reliability and avoiding timeouts
 
 export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
-  const { updateJobWithEnrichment, setSecondaryStatus, secondaryProcessingStatus, settings, pushToVideoInjector } = useStore();
+  const { updateJobWithEnrichment, setSecondaryStatus, secondaryProcessingStatus, settings, pushToVideoInjector, pushToTertiary, setActiveCsvDataset } = useStore();
   const [serverState, setServerState] = useState<ServerState>('checking');
   const [errorMessage, setErrorMessage] = useState('');
   const [injectionStatus, setInjectionStatus] = useState<InjectionStatus>('idle');
@@ -198,6 +198,10 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
       
       // 2. Persist to the main store
       updateJobWithEnrichment(job.id, updatedJob);
+
+      // 3. Initialize active CSV dataset for the pipeline reference
+      const csvData = generateExportData(updatedJob.matches);
+      setActiveCsvDataset(job.id, csvData);
       
       setInjectionStatus('success');
       console.log('🎉 Injection cycle complete.');
@@ -221,6 +225,11 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
     onComplete();
   };
 
+  const handlePushToTertiary = () => {
+    pushToTertiary(job.id);
+    onComplete();
+  };
+
   const enrichedPreview = useMemo(() => {
     if (serverState !== 'completed' && serverState !== 'partial_failure') return null;
     const matches = job.matches;
@@ -232,6 +241,15 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
       phones: matches.filter(m => m.enriched_phone).length,
     };
   }, [job, serverState]);
+
+  const hasMissingFields = useMemo(() => {
+    return job.matches.some(m => 
+      !m.enriched_opening_hours || 
+      !m.cuisine_type || 
+      !m.price_range || 
+      (!m.enriched_phone && !m.googleData.phone)
+    );
+  }, [job]);
 
   const renderDataRow = (label: string, value: string | null | undefined, isLink = false) => {
     const exists = !!value && value !== 'null' && value !== '{}' && value !== '[]';
@@ -535,19 +553,29 @@ export default function SecondaryEnrichmentSection({ job, onComplete }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col sm:flex-row gap-4 animate-in slide-in-from-bottom-4">
-                    <button 
-                      onClick={handlePushToVideo}
-                      className="flex-1 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-[0.98] group"
-                    >
-                      <Film size={24} className="group-hover:animate-bounce" />
-                      Push to Video Injector
-                    </button>
+                  <div className="flex flex-col gap-4 animate-in slide-in-from-bottom-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <button 
+                        onClick={handlePushToTertiary}
+                        disabled={!hasMissingFields}
+                        className={`flex-1 py-6 rounded-[2rem] font-black text-xl transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-95 group ${hasMissingFields ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                      >
+                        <Compass size={24} className={hasMissingFields ? "group-hover:animate-spin" : ""} />
+                        Send missing fields to TripAdvisor scrape
+                      </button>
+                      <button 
+                        onClick={handlePushToVideo}
+                        className="flex-1 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-[0.98] group"
+                      >
+                        <Film size={24} className="group-hover:animate-bounce" />
+                        Push to Video Injector
+                      </button>
+                    </div>
                     <button 
                       onClick={onComplete}
-                      className="flex-1 py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-98 group"
+                      className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-98 group"
                     >
-                      Push to Export
+                      Continue to Pipeline
                       <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>

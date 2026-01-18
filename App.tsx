@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Database, 
@@ -27,7 +26,8 @@ import {
   WifiOff,
   Moon,
   Sun,
-  Film
+  Film,
+  Compass
 } from 'lucide-react';
 import { useStore } from './store';
 import ImportPage from './pages/ImportPage';
@@ -39,10 +39,11 @@ import HistoryPage from './pages/HistoryPage';
 import UnmatchedPage from './pages/UnmatchedPage';
 import SettingsPage from './pages/SettingsPage';
 import VideoInjectorPage from './pages/VideoInjectorPage';
+import TertiaryScrapePage from './pages/TertiaryScrapePage';
 import SecondaryEnrichmentSection from './components/SecondaryEnrichmentSection';
 import { pythonServerManager } from './lib/pythonServerManager';
 
-type MainSection = 'primary' | 'secondary' | 'video' | 'export' | 'map' | 'history' | 'settings';
+export type MainSection = 'primary' | 'secondary' | 'tertiary' | 'video' | 'export' | 'map' | 'history' | 'settings';
 type SubTab = 'import' | 'matching' | 'review' | 'unmatched';
 type ApiStatus = 'unknown' | 'online' | 'offline' | 'checking';
 
@@ -61,6 +62,7 @@ const App: React.FC = () => {
     saveToPersistence, 
     pushToSecondary, 
     pushedToSecondaryId,
+    pushedToTertiaryId,
     pushedToVideoId,
     settings,
     toggleTheme
@@ -68,6 +70,7 @@ const App: React.FC = () => {
   
   const job = currentJob();
   const secondaryJob = jobs.find(j => j.id === pushedToSecondaryId);
+  const tertiaryJob = jobs.find(j => j.id === pushedToTertiaryId);
   const videoJob = jobs.find(j => j.id === pushedToVideoId);
   const isDarkMode = settings.theme === 'dark';
 
@@ -78,7 +81,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (mainSection === 'secondary') {
+    if (mainSection === 'secondary' || mainSection === 'tertiary') {
       checkApiHealth();
     }
   }, [mainSection]);
@@ -114,6 +117,7 @@ const App: React.FC = () => {
   const sidebarItems = [
     { id: 'primary', label: 'Primary Scrape', icon: Layers },
     { id: 'secondary', label: 'Secondary Scrape', icon: Sparkles },
+    { id: 'tertiary', label: 'Tertiary Scrape (TripAdvisor)', icon: Compass },
     { id: 'video', label: 'Video Injector', icon: Film },
     { id: 'export', label: 'Export', icon: CloudUpload, disabled: !job || job.matches.length === 0 },
     { id: 'map', label: 'Map View', icon: MapIcon, disabled: !job || job.matches.length === 0 },
@@ -141,14 +145,14 @@ const App: React.FC = () => {
                 key={item.id}
                 onClick={() => setMainSection(item.id as MainSection)}
                 disabled={item.disabled}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-left ${
                   mainSection === item.id 
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200/20' 
                     : item.disabled ? 'opacity-30 cursor-not-allowed text-slate-400' : 'hover:bg-slate-100 text-slate-500'
                 }`}
               >
-                <item.icon size={20} />
-                {item.label}
+                <item.icon size={20} className="shrink-0" />
+                <span className="truncate">{item.label}</span>
               </button>
             ))}
           </nav>
@@ -209,7 +213,11 @@ const App: React.FC = () => {
               </>
             )}
             {mainSection !== 'primary' && (
-              <h2 className="text-xl font-black capitalize tracking-tight">{mainSection === 'video' ? 'Video Injector' : mainSection} View</h2>
+              <h2 className="text-xl font-black capitalize tracking-tight">
+                {mainSection === 'video' ? 'Video Injector' : 
+                 mainSection === 'tertiary' ? 'Tertiary Scrape (TripAdvisor)' : 
+                 mainSection} View
+              </h2>
             )}
           </div>
 
@@ -261,7 +269,7 @@ const App: React.FC = () => {
                  )}
               </div>
               {secondaryJob ? (
-                <SecondaryEnrichmentSection job={secondaryJob} onComplete={() => setMainSection('video')} />
+                <SecondaryEnrichmentSection job={secondaryJob} onComplete={() => setMainSection('tertiary')} />
               ) : (
                 <div className="text-center py-20 bg-white/50 border-2 border-dashed border-slate-200 rounded-[3rem] p-16 max-w-xl mx-auto shadow-sm">
                    <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-400 mx-auto mb-8">
@@ -283,6 +291,22 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {mainSection === 'tertiary' && (
+            <div className="flex flex-col items-center">
+              {tertiaryJob ? (
+                <TertiaryScrapePage job={tertiaryJob} onNavigate={setMainSection} />
+              ) : (
+                <div className="text-center py-20 bg-white/50 border-2 border-dashed border-slate-200 rounded-[3rem] p-16 max-w-xl mx-auto shadow-sm">
+                   <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-400 mx-auto mb-8">
+                     <Compass size={40} />
+                   </div>
+                   <h3 className="text-2xl font-black mb-3">Tertiary Queue Empty</h3>
+                   <p className="text-slate-500 mb-10 leading-relaxed font-medium">TripAdvisor scrape requires jobs pushed from the Secondary Enrichment stage.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {mainSection === 'video' && (
             <div className="flex flex-col items-center">
                {videoJob ? (
@@ -293,7 +317,7 @@ const App: React.FC = () => {
                       <Film size={40} />
                     </div>
                     <h3 className="text-2xl font-black mb-3">Video Injector Idle</h3>
-                    <p className="text-slate-500 mb-10 leading-relaxed font-medium">No jobs ready for video injection. Push a completed secondary scrape to begin.</p>
+                    <p className="text-slate-500 mb-10 leading-relaxed font-medium">No jobs ready for video injection. Push a completed enrichment stage to begin.</p>
                  </div>
                )}
             </div>

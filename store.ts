@@ -1,6 +1,5 @@
-
 import { create } from 'zustand';
-import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem, UnmatchedCacheEntry, VideoInjectionStatus, VideoDiscoveryResult } from './types';
+import { Job, Match, OSMRestaurant, GoogleRestaurant, AppSettings, SupabaseConfig, MapSpot, FlaggedItem, UnmatchedCacheEntry, VideoInjectionStatus, VideoDiscoveryResult, TertiaryScrapeStatus, TertiarySnapshotRow } from './types';
 import { calculateMatchScore, getConfidence, normalizeName } from './lib/utils';
 
 interface AppState {
@@ -8,8 +7,10 @@ interface AppState {
   unmatchedCache: UnmatchedCacheEntry[];
   currentJobId: string | null;
   pushedToSecondaryId: string | null;
+  pushedToTertiaryId: string | null;
   pushedToVideoId: string | null;
   secondaryProcessingStatus: 'idle' | 'processing' | 'completed';
+  tertiaryProcessingStatus: 'idle' | 'processing' | 'completed';
   settings: AppSettings;
   supabaseConfig: SupabaseConfig;
   
@@ -50,6 +51,13 @@ interface AppState {
   pushToSecondary: (id: string) => void;
   setSecondaryStatus: (status: 'idle' | 'processing' | 'completed') => void;
 
+  // Tertiary Scrape Actions
+  pushToTertiary: (id: string) => void;
+  setTertiaryStatus: (status: 'idle' | 'processing' | 'completed') => void;
+  updateMatchTertiaryStatus: (jobId: string, matchIndex: number, status: TertiaryScrapeStatus, updates?: Partial<Match>) => void;
+  setFinalEnrichedDataset: (jobId: string, data: any[]) => void;
+  setActiveCsvDataset: (jobId: string, data: any[]) => void;
+
   // Video Injector Actions
   pushToVideoInjector: (id: string) => void;
   updateMatchVideoStatus: (jobId: string, matchIndex: number, status: VideoInjectionStatus, results?: VideoDiscoveryResult[], selected?: string[]) => void;
@@ -61,13 +69,24 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light'
 };
 
+const DEFAULT_SUPABASE: SupabaseConfig = {
+  url: '',
+  key: '',
+  tableName: 'restaurants'
+};
+
+let isResetting = false;
+
 const persist = (jobs: Job[], currentJobId: string | null, unmatchedCache: UnmatchedCacheEntry[], supabaseConfig: SupabaseConfig, settings: AppSettings) => {
+  if (isResetting) return;
   localStorage.setItem('rmPro_jobs', JSON.stringify(jobs));
   localStorage.setItem('rmPro_unmatchedCache', JSON.stringify(unmatchedCache));
   localStorage.setItem('rmPro_supabaseConfig', JSON.stringify(supabaseConfig));
   localStorage.setItem('rmPro_settings', JSON.stringify(settings));
   if (currentJobId) {
     localStorage.setItem('rmPro_currentJobId', currentJobId);
+  } else {
+    localStorage.removeItem('rmPro_currentJobId');
   }
 };
 
@@ -76,10 +95,12 @@ export const useStore = create<AppState>((set, get) => ({
   unmatchedCache: JSON.parse(localStorage.getItem('rmPro_unmatchedCache') || '[]'),
   currentJobId: localStorage.getItem('rmPro_currentJobId') || null,
   pushedToSecondaryId: localStorage.getItem('rmPro_pushedToSecondaryId') || null,
+  pushedToTertiaryId: localStorage.getItem('rmPro_pushedToTertiaryId') || null,
   pushedToVideoId: localStorage.getItem('rmPro_pushedToVideoId') || null,
   secondaryProcessingStatus: 'idle',
+  tertiaryProcessingStatus: 'idle',
   settings: JSON.parse(localStorage.getItem('rmPro_settings') || JSON.stringify(DEFAULT_SETTINGS)),
-  supabaseConfig: JSON.parse(localStorage.getItem('rmPro_supabaseConfig') || '{"url": "", "key": "", "tableName": "restaurants"}'),
+  supabaseConfig: JSON.parse(localStorage.getItem('rmPro_supabaseConfig') || JSON.stringify(DEFAULT_SUPABASE)),
 
   currentJob: () => {
     const { jobs, currentJobId } = get();
@@ -112,7 +133,11 @@ export const useStore = create<AppState>((set, get) => ({
   }),
 
   setCurrentJobId: (id) => {
-    localStorage.setItem('rmPro_currentJobId', id);
+    if (id) {
+      localStorage.setItem('rmPro_currentJobId', id);
+    } else {
+      localStorage.removeItem('rmPro_currentJobId');
+    }
     set({ currentJobId: id });
   },
 
@@ -236,8 +261,26 @@ export const useStore = create<AppState>((set, get) => ({
   }),
 
   resetApp: () => {
+    isResetting = true;
+    console.log('🧹 Clearing all data and resetting state...');
+    
     localStorage.clear();
-    set({ jobs: [], currentJobId: null, pushedToSecondaryId: null, pushedToVideoId: null, unmatchedCache: [], settings: DEFAULT_SETTINGS, supabaseConfig: { url: '', key: '', tableName: 'restaurants' } });
+    
+    set({ 
+      jobs: [], 
+      currentJobId: null, 
+      pushedToSecondaryId: null, 
+      pushedToTertiaryId: null,
+      pushedToVideoId: null, 
+      unmatchedCache: [], 
+      settings: DEFAULT_SETTINGS, 
+      supabaseConfig: DEFAULT_SUPABASE,
+      secondaryProcessingStatus: 'idle',
+      tertiaryProcessingStatus: 'idle'
+    });
+    
+    // Safety timeout to release reset lock
+    setTimeout(() => { isResetting = false; }, 2000);
   },
 
   saveToPersistence: async () => {
@@ -322,6 +365,77 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setSecondaryStatus: (status) => set({ secondaryProcessingStatus: status }),
+
+  pushToTertiary: (id) => set((state) => {
+    const job = state.jobs.find(j => j.id === id);
+    if (!job) return state;
+
+    // Create immutable snapshot ONLY when pushing to tertiary
+    const snapshot: TertiarySnapshotRow[] = job.matches
+      .filter(m => m.status === 'confirmed' || m.status === 'auto_confirmed')
+      .filter(m => {
+        const hasHours = !!m.enriched_opening_hours;
+        const hasCuisine = !!m.cuisine_type;
+        const hasPrice = !!m.price_range;
+        const hasPhone = !!(m.enriched_phone || m.googleData.phone);
+        return !hasHours || !hasCuisine || !hasPrice || !hasPhone;
+      })
+      .map(m => ({
+        google_place_id: m.googleData.google_place_id || m.googleData.url?.split('query_place_id=')[1]?.split('&')[0] || `g-${m.googleData.title.replace(/\s+/g, '-')}`,
+        name: m.googleData.title,
+        city: 'London',
+        existing_opening_hours: m.enriched_opening_hours || null,
+        existing_cuisine_type: m.cuisine_type || null,
+        existing_price_range: m.price_range || null,
+        existing_phone: m.enriched_phone || m.googleData.phone || null
+      }));
+
+    localStorage.setItem('rmPro_pushedToTertiaryId', id);
+    
+    const newJobs = state.jobs.map(j => j.id === id ? { ...j, tertiarySnapshot: snapshot } : j);
+    persist(newJobs, id, state.unmatchedCache, state.supabaseConfig, state.settings);
+
+    return { 
+      jobs: newJobs,
+      pushedToTertiaryId: id, 
+      tertiaryProcessingStatus: 'idle' 
+    };
+  }),
+
+  setTertiaryStatus: (status) => set({ tertiaryProcessingStatus: status }),
+
+  updateMatchTertiaryStatus: (jobId, matchIndex, status, updates) => set((state) => {
+    const newJobs = state.jobs.map(j => {
+      if (j.id === jobId) {
+        const newMatches = [...j.matches];
+        newMatches[matchIndex] = {
+          ...newMatches[matchIndex],
+          tertiary_status: status,
+          ...updates
+        };
+        return { ...j, matches: newMatches };
+      }
+      return j;
+    });
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
+    return { jobs: newJobs };
+  }),
+
+  setFinalEnrichedDataset: (jobId, data) => set((state) => {
+    const newJobs = state.jobs.map(j => 
+      j.id === jobId ? { ...j, finalEnrichedDataset: data } : j
+    );
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
+    return { jobs: newJobs };
+  }),
+
+  setActiveCsvDataset: (jobId, data) => set((state) => {
+    const newJobs = state.jobs.map(j => 
+      j.id === jobId ? { ...j, activeCsvDataset: data } : j
+    );
+    persist(newJobs, state.currentJobId, state.unmatchedCache, state.supabaseConfig, state.settings);
+    return { jobs: newJobs };
+  }),
 
   pushToVideoInjector: (id) => set((state) => {
     localStorage.setItem('rmPro_pushedToVideoId', id);

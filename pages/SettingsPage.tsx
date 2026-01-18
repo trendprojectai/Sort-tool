@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { Database, Link2, Shield, Save, Check, RefreshCw, AlertCircle, Terminal, Copy } from 'lucide-react';
+import { Database, Link2, Shield, Save, Check, RefreshCw, AlertCircle, Terminal, Copy, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 
 const SettingsPage: React.FC = () => {
-  const { supabaseConfig, setSupabaseConfig } = useStore();
+  const { supabaseConfig, setSupabaseConfig, resetApp } = useStore();
   
   const [config, setConfig] = useState(supabaseConfig);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,6 +60,17 @@ const SettingsPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleMasterReset = () => {
+    if (window.confirm("⚠️ MASTER RESET: This will permanently delete all jobs, matches, and configurations. This cannot be undone. Are you sure?")) {
+      // Direct storage clear to be 100% sure
+      localStorage.clear();
+      resetApp(); // Also call store reset
+      
+      // Force clean reload at root path
+      window.location.href = window.location.origin + window.location.pathname;
+    }
+  };
+
   const handleTestConnection = async () => {
     if (!config.url || !config.key || !config.tableName) return;
 
@@ -99,7 +110,7 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div>
         <h2 className="text-4xl font-black text-slate-800 tracking-tight mb-2">System Configuration</h2>
         <p className="text-slate-500 font-medium">Manage integrations, API keys, and global application behavior.</p>
@@ -236,6 +247,23 @@ const SettingsPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Master Reset Area */}
+      <div className="flex justify-end pt-10 border-t border-slate-100">
+        <div className="flex flex-col items-end gap-3 text-right">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Destructive Actions</p>
+          <button 
+            onClick={handleMasterReset}
+            className="group flex items-center gap-3 px-8 py-4 bg-white border-2 border-red-100 text-red-500 rounded-[1.5rem] font-black text-xs uppercase tracking-widest hover:bg-red-50 hover:border-red-200 transition-all shadow-xl shadow-red-100/20 active:scale-95"
+          >
+            <Trash2 size={16} className="group-hover:rotate-12 transition-transform" />
+            Master System Reset
+          </button>
+          <p className="text-[9px] font-bold text-slate-300 max-w-xs leading-relaxed">
+            Clicking this will wipe all browser local storage, delete your current jobs, and revert all settings to factory defaults.
+          </p>
         </div>
       </div>
     </div>

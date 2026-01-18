@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { CheckCircle2, ChevronRight, Loader2, Zap, ShieldCheck, Activity, Search } from 'lucide-react';
@@ -52,6 +51,8 @@ const MatchingPage: React.FC<MatchingPageProps> = ({ onNext }) => {
       if (bestMatch) {
         usedGoogleIndices.add(bestMatch.index);
         const status = bestMatch.score >= 95 ? 'auto_confirmed' : 'pending';
+        const googleItem = job.googleData[bestMatch.index] as any;
+        
         matches.push({
           osmData: osm,
           googleData: job.googleData[bestMatch.index],
@@ -59,7 +60,13 @@ const MatchingPage: React.FC<MatchingPageProps> = ({ onNext }) => {
           method: bestMatch.method,
           confidence: getConfidence(bestMatch.score),
           status: status,
-          reviewed_at: status === 'auto_confirmed' ? new Date().toISOString() : undefined
+          reviewed_at: status === 'auto_confirmed' ? new Date().toISOString() : undefined,
+          // Carry over existing enrichment fields if present in source
+          tripadvisor_status: googleItem.tripadvisor_status || null,
+          tripadvisor_url: googleItem.tripadvisor_url || null,
+          tripadvisor_confidence: googleItem.tripadvisor_confidence !== undefined ? Number(googleItem.tripadvisor_confidence) : null,
+          tripadvisor_distance_m: googleItem.tripadvisor_distance_m !== undefined ? Number(googleItem.tripadvisor_distance_m) : null,
+          tripadvisor_match_notes: googleItem.tripadvisor_match_notes || null
         });
       } else {
         unmatchedOSM.push(osm);

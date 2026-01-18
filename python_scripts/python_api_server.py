@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import tempfile
 import os
 import sys
 import json
+import traceback
 
 # Add current directory to path so we can import secondary_enrichment
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -15,25 +16,36 @@ except ImportError:
     def process_csv(input_path, output_path):
         import pandas as pd
         df = pd.read_csv(input_path)
-        # Mocking enrichment logic
+        # Mocking enrichment logic robustly with pandas
         df['cover_image'] = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4'
         df['menu_url'] = 'https://example.com/menu'
         df['menu_pdf_url'] = None
         df['gallery_images'] = '["https://images.unsplash.com/photo-1552566626-52f8b828add9"]'
         df['phone'] = '+44 20 7123 4567'
         df['opening_hours'] = '{"Mon": "9:00 - 23:00", "Tue": "9:00 - 23:00"}'
+        
+        # Ensure new TA fields are also in mock
+        df['tripadvisor_status'] = 'pending'
+        df['tripadvisor_url'] = None
+        df['tripadvisor_confidence'] = 0.0
+        df['tripadvisor_distance_m'] = None
+        df['tripadvisor_match_notes'] = None
+        
         df.to_csv(output_path, index=False)
 
 app = Flask(__name__)
 
-# Explicit CORS configuration to allow all origins and standard headers
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Authorization"]
-    }
-})
+# Standard CORS configuration with explicit origins and methods
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add('Access-Control-Allow-Headers', "*")
+        response.headers.add('Access-Control-Allow-Methods', "*")
+        return response
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -41,7 +53,7 @@ def health():
     return jsonify({
         'status': 'ok', 
         'message': 'Secondary Enrichment API is running',
-        'version': '1.0.1'
+        'version': '1.0.5'
     }), 200
 
 @app.route('/enrich', methods=['POST'])
@@ -63,7 +75,11 @@ def enrich():
         temp_output_path = temp_input_path.replace('.csv', '_enriched.csv')
         
         # Run enrichment (calling the script logic)
-        process_csv(temp_input_path, temp_output_path)
+        try:
+            process_csv(temp_input_path, temp_output_path)
+        except Exception as e:
+            # Catch specific errors from script
+            return jsonify({'error': f"Script Error: {str(e)}"}), 500
         
         # Read enriched output
         if not os.path.exists(temp_output_path):
@@ -81,7 +97,7 @@ def enrich():
         return jsonify({'enriched_csv': enriched_csv})
     
     except Exception as e:
-        print(f"Error during enrichment: {str(e)}")
+        print(f"Error during enrichment: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

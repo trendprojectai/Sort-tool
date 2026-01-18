@@ -1,5 +1,4 @@
-
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { OSMRestaurant, GoogleRestaurant } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -63,6 +62,80 @@ BE EXTREMELY LENIENT - find matches even with slight variations or partial name 
   } catch (error) {
     console.error("Gemini AI failed:", error);
     return [];
+  }
+}
+
+/**
+ * Deterministic Data Merger for TripAdvisor Fallback
+ */
+export async function deterministicMerge(originalData: any, tripAdvisorData: any) {
+  const systemInstruction = `You are a deterministic data processing agent.
+Rules:
+- Never infer, guess, or hallucinate.
+- Never overwrite existing data.
+- Never remove fields.
+- Never summarize or explain.
+- Never change field names.
+
+You must:
+- Preserve all fields exactly as received.
+- Use null for missing values.
+- Output valid JSON only.
+- Perform no reasoning.
+
+If a value already exists, it must remain unchanged.
+
+Your task:
+- Merge TripAdvisor data ONLY into fields that are null in the original data
+- Never overwrite existing values
+- Preserve the full schema`;
+
+  const prompt = `
+Original Data:
+${JSON.stringify(originalData, null, 2)}
+
+TripAdvisor Fallback:
+${JSON.stringify(tripAdvisorData, null, 2)}
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-pro-preview",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            google_place_id: { type: Type.STRING },
+            cover_image: { type: Type.STRING, nullable: true },
+            cover_image_alt: { type: Type.STRING, nullable: true },
+            menu_url: { type: Type.STRING, nullable: true },
+            menu_pdf_url: { type: Type.STRING, nullable: true },
+            gallery_images: { type: Type.ARRAY, items: { type: Type.STRING }, nullable: true },
+            phone: { type: Type.STRING, nullable: true },
+            phone_formatted: { type: Type.STRING, nullable: true },
+            email: { type: Type.STRING, nullable: true },
+            instagram_handle: { type: Type.STRING, nullable: true },
+            instagram_url: { type: Type.STRING, nullable: true },
+            tiktok_handle: { type: Type.STRING, nullable: true },
+            tiktok_url: { type: Type.STRING, nullable: true },
+            tiktok_videos: { type: Type.ARRAY, items: { type: Type.OBJECT }, nullable: true },
+            facebook_url: { type: Type.STRING, nullable: true },
+            opening_hours: { type: Type.ARRAY, items: { type: Type.STRING }, nullable: true },
+            cuisine_type: { type: Type.STRING, nullable: true },
+            price_range: { type: Type.STRING, nullable: true }
+          },
+          required: ["google_place_id"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Deterministic merge failed:", error);
+    return originalData;
   }
 }
 

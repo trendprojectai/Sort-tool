@@ -1,9 +1,9 @@
 const API_URL = 'https://restaurant-enrichment-api-production.up.railway.app';
 
 class PythonServerManager {
-  async checkServerHealth(): Promise<boolean> {
+  async checkServerHealth(retries = 3): Promise<boolean> {
     const healthUrl = `${API_URL}/health`;
-    console.log(`🔗 Checking API health at: ${healthUrl}`);
+    console.log(`🔗 Checking API health at: ${healthUrl} (Attempt ${4 - retries}/3)`);
     
     try {
       const controller = new AbortController();
@@ -11,9 +11,12 @@ class PythonServerManager {
 
       const response = await fetch(healthUrl, {
         method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
         signal: controller.signal,
         headers: {
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
         }
       });
       
@@ -21,15 +24,21 @@ class PythonServerManager {
       console.log(`✅ Health check status: ${response.status}`);
       return response.ok;
     } catch (error: any) {
-      console.error('❌ Health check failed:', error);
+      console.error(`❌ Health check attempt failed:`, error.message);
+      
+      if (retries > 0) {
+        console.log('⏳ Retrying health check in 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return this.checkServerHealth(retries - 1);
+      }
+      
       return false;
     }
   }
 
   async enrichRestaurants(csvData: string): Promise<string> {
     const enrichUrl = `${API_URL}/enrich`;
-    console.log('🔗 Calling direct API:', enrichUrl);
-    console.log('📦 Sending data length:', csvData.length);
+    console.log('🔗 Calling enrichment API:', enrichUrl);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
@@ -37,6 +46,8 @@ class PythonServerManager {
     try {
       const response = await fetch(enrichUrl, {
         method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -46,22 +57,25 @@ class PythonServerManager {
       });
 
       clearTimeout(timeoutId);
-      console.log('✅ Response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`❌ API Error (${response.status}):`, errorText);
-        throw new Error(`API returned ${response.status}: ${errorText}`);
+        throw new Error(`Cloud API returned ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
       return result.enriched_csv;
     } catch (error: any) {
       clearTimeout(timeoutId);
-      console.error('❌ Fetch error:', error);
       
       if (error.name === 'AbortError') {
-        throw new Error('Cloud enrichment timed out (5 minute limit). Try processing in smaller batches.');
+        throw new Error('Cloud enrichment timed out. The server took too long to respond.');
+      }
+
+      if (error.message === 'Failed to fetch') {
+        console.error('❌ Network error/CORS block detected.');
+        throw new Error('Connection failed. Please check if the API server is online. If you are developing locally, ensure your browser allows cross-origin requests to Railway.');
       }
       
       throw error;

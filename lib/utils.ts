@@ -284,7 +284,12 @@ export function generateExportData(matches: Match[]) {
       menu_url: nullIfEmpty(match.menu_url),
       menu_pdf_url: nullIfEmpty(match.menu_pdf_url),
       gallery_images: match.gallery_images ? JSON.stringify(match.gallery_images) : null,
-      enriched_phone: nullIfEmpty(match.enriched_phone)
+      enriched_phone: nullIfEmpty(match.enriched_phone),
+      tripadvisor_url: nullIfEmpty(match.tripadvisor_url),
+      tripadvisor_confidence: nullIfEmpty(match.tripadvisor_confidence),
+      tripadvisor_distance_m: nullIfEmpty(match.tripadvisor_distance_m),
+      tripadvisor_status: nullIfEmpty(match.tripadvisor_status),
+      tripadvisor_match_notes: nullIfEmpty(match.tripadvisor_match_notes)
     };
   });
 }

@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Download, CloudUpload, Database, CheckCircle2, AlertCircle, Loader2, Link2, Check } from 'lucide-react';
+import { Download, CloudUpload, Database, CheckCircle2, AlertCircle, Loader2, Link2, Check, ExternalLink, MessageSquare } from 'lucide-react';
 import { useStore } from '../store';
 import { generateExportData } from '../lib/utils';
 
@@ -14,14 +13,17 @@ const ExportPage: React.FC = () => {
   const matches = job?.matches || [];
   const confirmedMatches = matches.filter(m => m.status === 'confirmed' || m.status === 'auto_confirmed');
   
+  // Rule: Use activeCsvDataset if it exists for consistency
+  const exportData = job?.activeCsvDataset || generateExportData(confirmedMatches);
+  
   const isSupabaseLinked = !!(supabaseConfig.url && supabaseConfig.key && supabaseConfig.tableName);
 
   const handleCsvDownload = () => {
-    if (confirmedMatches.length === 0) return;
+    if (exportData.length === 0) return;
     setIsExporting(true);
-    const data = generateExportData(confirmedMatches);
-    const headers = Object.keys(data[0] || {}).join(',');
-    const rows = data.map(row => 
+    
+    const headers = Object.keys(exportData[0] || {}).join(',');
+    const rows = exportData.map(row => 
       Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')
     ).join('\n');
     
@@ -39,11 +41,10 @@ const ExportPage: React.FC = () => {
   };
 
   const handleSupabasePush = async () => {
-    if (!isSupabaseLinked || confirmedMatches.length === 0) return;
+    if (!isSupabaseLinked || exportData.length === 0) return;
 
     setPushStatus('pushing');
     setErrorMessage(null);
-    const data = generateExportData(confirmedMatches);
 
     try {
       // Normalize URL: remove trailing slash and ensure rest/v1 prefix
@@ -59,7 +60,7 @@ const ExportPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Prefer': 'resolution=merge-duplicates'
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(exportData)
       });
 
       if (!response.ok) {
@@ -88,10 +89,10 @@ const ExportPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-7xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-10">
         <h2 className="text-4xl font-black text-slate-800 tracking-tight mb-3">Finalize & Export</h2>
-        <p className="text-slate-500 text-lg font-medium">You have <span className="text-indigo-600 font-black">{confirmedMatches.length}</span> confirmed matches ready for delivery.</p>
+        <p className="text-slate-500 text-lg font-medium">You have <span className="text-indigo-600 font-black">{exportData.length}</span> records in the active dataset ready for delivery.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -109,17 +110,17 @@ const ExportPage: React.FC = () => {
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> UTF-8 Standard Encoding
               </li>
               <li className="flex items-center gap-3 text-xs font-bold text-slate-600">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Full Confidence Metadata
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Multi-Stage Enrichment Data
               </li>
               <li className="flex items-center gap-3 text-xs font-bold text-slate-600">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Multi-Source IDs Included
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> TripAdvisor Validation Fields
               </li>
             </ul>
           </div>
           
           <button 
             onClick={handleCsvDownload}
-            disabled={confirmedMatches.length === 0 || isExporting}
+            disabled={exportData.length === 0 || isExporting}
             className="w-full py-5 bg-slate-900 text-white rounded-[1.25rem] font-black text-base hover:bg-indigo-600 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-40"
           >
             {isExporting ? <Loader2 className="animate-spin" size={20} /> : <Download size={20} />}
@@ -130,7 +131,7 @@ const ExportPage: React.FC = () => {
         {/* Supabase Card */}
         <div className="bg-white/50 backdrop-blur-md rounded-[2.5rem] p-8 border border-white/60 shadow-xl flex flex-col justify-between hover:shadow-2xl transition-all group">
           <div>
-            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 shadow-sm group-hover:scale-110 transition-transform">
+            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 shadow-sm group-hover:scale-110 transition-transform">
               <CloudUpload size={28} />
             </div>
             <h3 className="text-2xl font-black text-slate-800 mb-2">Supabase Sync</h3>
@@ -156,7 +157,7 @@ const ExportPage: React.FC = () => {
           
           <button 
             onClick={handleSupabasePush}
-            disabled={!isSupabaseLinked || confirmedMatches.length === 0 || pushStatus === 'pushing'}
+            disabled={!isSupabaseLinked || exportData.length === 0 || pushStatus === 'pushing'}
             className={`w-full py-5 rounded-[1.25rem] font-black text-base transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-40 ${
               pushStatus === 'success' ? 'bg-emerald-100 text-emerald-700' : 
               pushStatus === 'error' ? 'bg-red-100 text-red-700 border-red-200' :
@@ -184,39 +185,55 @@ const ExportPage: React.FC = () => {
       </div>
 
       {/* Export Preview */}
-      <div className="bg-white/40 border border-slate-100 rounded-[2.5rem] p-8 shadow-sm">
+      <div className="bg-white/40 border border-slate-100 rounded-[2.5rem] p-8 shadow-sm overflow-hidden">
         <h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-6 px-2">Export Data Preview (Sample)</h4>
         <div className="overflow-x-auto rounded-2xl border border-slate-50 bg-white">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/50">
               <tr className="border-b border-slate-100">
                 <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Restaurant Name</th>
-                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Street Address</th>
-                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Rating</th>
-                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">TripAdvisor Link</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-center">TA Confidence</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-center">TA Status</th>
+                <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider">Audit Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {generateExportData(confirmedMatches).slice(0, 4).map((row, i) => (
+              {exportData.slice(0, 10).map((row, i) => (
                 <tr key={i} className="hover:bg-slate-50/30 transition-colors">
                   <td className="px-6 py-4 font-extrabold text-slate-800">{row.name}</td>
-                  <td className="px-6 py-4 text-slate-500 font-medium">{row.address}</td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-1 font-black text-amber-500">
-                      {row.rating} ★
-                    </div>
+                    {row.tripadvisor_url ? (
+                      <div className="flex items-center gap-1.5 text-indigo-600 font-bold">
+                        <Check size={12} className="text-emerald-500" />
+                        <span className="truncate max-w-[150px]">{row.tripadvisor_url.replace('https://www.', '')}</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 italic">None</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`font-black ${row.tripadvisor_confidence >= 0.75 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                      {row.tripadvisor_confidence ? `${Math.round(row.tripadvisor_confidence * 100)}%` : '--'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-widest ${row.tripadvisor_status === 'found' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                      {row.tripadvisor_status || '--'}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-2.5 py-1 rounded-lg font-black text-[10px] uppercase tracking-wider bg-slate-100 text-slate-600">
-                      {row.category_name}
-                    </span>
+                     <div className="flex items-center gap-2 text-slate-500 italic max-w-[200px]">
+                       <MessageSquare size={12} className="shrink-0 text-slate-300" />
+                       <span className="truncate">{row.tripadvisor_match_notes || 'No notes'}</span>
+                     </div>
                   </td>
                 </tr>
               ))}
-              {confirmedMatches.length === 0 && (
+              {exportData.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-slate-300 font-bold italic">
-                    No confirmed matches to preview.
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-300 font-bold italic">
+                    No records found in active dataset.
                   </td>
                 </tr>
               )}

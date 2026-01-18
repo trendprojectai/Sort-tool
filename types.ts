@@ -1,4 +1,3 @@
-
 export interface OSMRestaurant {
   name: string;
   latitude: number;
@@ -42,6 +41,7 @@ export interface UnmatchedCacheEntry {
 export type Confidence = 'High' | 'Medium' | 'Low' | 'Unmatched';
 export type MatchStatus = 'pending' | 'confirmed' | 'rejected' | 'skipped' | 'auto_confirmed';
 export type VideoInjectionStatus = 'idle' | 'discovering' | 'ready_for_review' | 'injected' | 'error';
+export type TertiaryScrapeStatus = 'idle' | 'processing' | 'completed' | 'error';
 
 export interface VideoDiscoveryResult {
   id: string;
@@ -51,6 +51,16 @@ export interface VideoDiscoveryResult {
   like_count: number;
   caption: string;
   author_handle: string;
+}
+
+export interface TertiarySnapshotRow {
+  google_place_id: string;
+  name: string;
+  city: string;
+  existing_opening_hours: any;
+  existing_cuisine_type: any;
+  existing_price_range: any;
+  existing_phone: any;
 }
 
 export interface Match {
@@ -70,6 +80,16 @@ export interface Match {
   gallery_images?: string[];
   enriched_phone?: string | null;
   enriched_opening_hours?: Record<string, string> | null;
+
+  // Tertiary Scrape fields
+  cuisine_type?: string | null;
+  price_range?: string | null;
+  tertiary_status?: TertiaryScrapeStatus;
+  tripadvisor_status?: 'found' | 'not_found' | 'pending';
+  tripadvisor_url?: string | null;
+  tripadvisor_confidence?: number | null;
+  tripadvisor_distance_m?: number | null;
+  tripadvisor_match_notes?: string | null;
 
   // Video Injector fields
   videoStatus?: VideoInjectionStatus;
@@ -113,6 +133,10 @@ export interface Job {
   flaggedItems: FlaggedItem[];
   currentReviewIndex: number;
   enriched_at?: string;
+  tertiary_at?: string;
+  tertiarySnapshot?: TertiarySnapshotRow[];
+  finalEnrichedDataset?: any[];
+  activeCsvDataset?: any[];
 }
 
 export interface AppSettings {

@@ -9,10 +9,17 @@ export interface EnrichedData {
   gallery_images?: string; // Expecting JSON string from Python
   phone?: string | null;
   opening_hours?: string; // Expecting JSON string from Python
+  // TripAdvisor fields that might be returned by the scraper
+  tripadvisor_status?: string | null;
+  tripadvisor_url?: string | null;
+  tripadvisor_confidence?: number | null;
+  tripadvisor_distance_m?: number | null;
+  tripadvisor_match_notes?: string | null;
 }
 
 /**
- * Exports current job matches to CSV format for the Python script
+ * Exports current job matches to CSV format for the Python script.
+ * Now includes TripAdvisor validation fields to ensure no data loss in the multi-stage pipeline.
  */
 export function exportJobToCSV(job: Job): string {
   // Only export confirmed or auto_confirmed matches
@@ -22,20 +29,26 @@ export function exportJobToCSV(job: Job): string {
 
   const data = exportMatches.map(match => {
     const google = match.googleData;
-    const osm = match.osmData;
     
     // Extract place ID consistently
     const googlePlaceId = google.google_place_id || 
                          google.url?.split('query_place_id=')[1]?.split('&')[0] || 
                          `g-${google.title.replace(/\s+/g, '-')}`;
 
+    // Include the core fields expected by the secondary scraper
+    // PLUS the TripAdvisor validation fields to satisfy "Do NOT drop or ignore them"
     return {
-      google_place_id: googlePlaceId,
-      name: google.title,
-      website: google.website || '',
-      area: 'Soho', // Default context for current project
+      google_place_id: String(googlePlaceId || ''),
+      name: String(google.title || ''),
+      website: String(google.website || ''),
+      area: 'Soho', 
       city: 'London',
-      address: google.street || ''
+      address: String(google.street || ''),
+      tripadvisor_status: match.tripadvisor_status || '',
+      tripadvisor_url: match.tripadvisor_url || '',
+      tripadvisor_confidence: match.tripadvisor_confidence || '',
+      tripadvisor_distance_m: match.tripadvisor_distance_m || '',
+      tripadvisor_match_notes: match.tripadvisor_match_notes || ''
     };
   });
 
@@ -49,6 +62,7 @@ export function parseEnrichedCSV(csvText: string): EnrichedData[] {
   const result = Papa.parse(csvText, {
     header: true,
     skipEmptyLines: true,
+    dynamicTyping: true
   });
   return result.data as EnrichedData[];
 }
@@ -86,6 +100,7 @@ export function mergeEnrichedData(job: Job, enrichedData: EnrichedData[]): Job {
       }
     };
 
+    // Return a Match object, explicitly casting properties to satisfy TypeScript union types
     return {
       ...match,
       cover_image: enrichment.cover_image || match.cover_image,
@@ -94,7 +109,14 @@ export function mergeEnrichedData(job: Job, enrichedData: EnrichedData[]): Job {
       gallery_images: safeJsonParse(enrichment.gallery_images, match.gallery_images || []),
       enriched_phone: enrichment.phone || match.enriched_phone,
       enriched_opening_hours: safeJsonParse(enrichment.opening_hours, match.enriched_opening_hours || null),
-    };
+      // Update TA fields if present in enrichment.
+      // Fix: Type 'string' is not assignable to type '"pending" | "found" | "not_found"'.
+      tripadvisor_status: (enrichment.tripadvisor_status as any) || match.tripadvisor_status,
+      tripadvisor_url: enrichment.tripadvisor_url || match.tripadvisor_url,
+      tripadvisor_confidence: enrichment.tripadvisor_confidence !== undefined ? enrichment.tripadvisor_confidence : match.tripadvisor_confidence,
+      tripadvisor_distance_m: enrichment.tripadvisor_distance_m !== undefined ? enrichment.tripadvisor_distance_m : match.tripadvisor_distance_m,
+      tripadvisor_match_notes: enrichment.tripadvisor_match_notes || match.tripadvisor_match_notes
+    } as Match;
   });
 
   return {
