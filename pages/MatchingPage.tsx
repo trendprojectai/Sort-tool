@@ -25,12 +25,25 @@ const MatchingPage: React.FC<MatchingPageProps> = ({ onNext }) => {
 
   useEffect(() => {
     if (job && job.osmData.length && job.googleData.length) {
+      // Guard: Do not run matching if the dataset is locked from further stages
+      if (job.lockedDataset) {
+        setIsProcessing(false);
+        setStats({
+          totalMatched: job.matches.length,
+          autoConfirmed: job.matches.filter(m => m.status === 'auto_confirmed').length,
+          needsReview: job.matches.filter(m => m.status === 'pending').length,
+          high: job.matches.filter(m => m.confidence === 'High').length,
+          medium: job.matches.filter(m => m.confidence === 'Medium').length,
+          low: job.matches.filter(m => m.confidence === 'Low').length,
+        });
+        return;
+      }
       setTimeout(runMatching, 1500);
     }
   }, []);
 
   const runMatching = () => {
-    if (!job) return;
+    if (!job || job.lockedDataset) return;
     
     const matches: Match[] = [];
     const unmatchedOSM: OSMRestaurant[] = [];

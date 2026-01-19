@@ -82,7 +82,7 @@ class PythonServerManager {
     }
   }
 
-  async createTertiarySnapshot(csvData: string): Promise<{snapshot_id: string, row_count: number}> {
+  async createTertiarySnapshot(csvData: string): Promise<{tertiary_snapshot_id: string, row_count: number}> {
     const url = `${API_URL}/tertiary/snapshot`;
     console.log('🔗 Creating Tertiary Snapshot:', url);
     
@@ -101,7 +101,7 @@ class PythonServerManager {
 
       const result = await response.json();
       return {
-        snapshot_id: result.snapshot_id,
+        tertiary_snapshot_id: result.tertiary_snapshot_id,
         row_count: result.row_count || 0
       };
     } catch (error: any) {
@@ -110,7 +110,7 @@ class PythonServerManager {
     }
   }
 
-  async tertiaryEnrich(snapshotId: string): Promise<any[]> {
+  async tertiaryEnrich(snapshotId: string): Promise<any> {
     const url = `${API_URL}/tertiary/enrich`;
     console.log('🔗 Running Tertiary Enrichment:', url);
     
@@ -134,8 +134,7 @@ class PythonServerManager {
         throw new Error(`Tertiary Enrich Error (${response.status}): ${errorText}`);
       }
 
-      const result = await response.json();
-      return result.results; 
+      return await response.json();
     } catch (error: any) {
       console.error('❌ Tertiary enrichment failed:', error);
       throw error;

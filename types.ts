@@ -140,6 +140,11 @@ export interface Job {
   tertiarySnapshot?: TertiarySnapshotRow[];
   finalEnrichedDataset?: any[];
   activeCsvDataset?: any[];
+  
+  // Pipeline State Persistence
+  tertiarySnapshotId?: string;
+  stage?: string;
+  lockedDataset?: boolean;
 }
 
 export interface AppSettings {
